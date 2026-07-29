@@ -57,6 +57,7 @@ body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 .topbar-left{display:flex;align-items:center;gap:20px}
 .topbar-logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:var(--text);letter-spacing:-0.4px;font-family:'Outfit',sans-serif}
 .topbar-logo svg{box-shadow:0 0 0 1px rgba(16,212,176,0.1),0 0 12px -2px rgba(16,212,176,0.12)}
+#env-badge{font-size:10px;font-weight:700;letter-spacing:0.06em;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:5px;padding:2px 7px;font-family:'JetBrains Mono',monospace}
 
 .topbar-right{display:flex;align-items:center;gap:8px}
 #live-price-indicator{display:none}
@@ -532,6 +533,7 @@ html, body {
         <circle cx="26" cy="13" r="2" fill="rgba(0,0,0,0.7)"/>
       </svg>
       <span>Financial Hub</span>
+      <span id="env-badge" style="display:none">DEV</span>
     </div>
     <div style="padding-left:20px;border-left:1px solid rgba(255,255,255,0.08);font-size:12px;color:var(--text3);letter-spacing:0.01em;font-style:italic">Know your money</div>
   </div>
@@ -1259,6 +1261,12 @@ html, body {
 <script>
 const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
+const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+if(APP_ENV==='dev'){
+  const envBadge=document.getElementById('env-badge');
+  if(envBadge) envBadge.style.display='inline-block';
+  document.title = 'Financial Hub · DEV';
+}
 
 const api = (path, opts={}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers:{ apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation', ...opts.headers },
