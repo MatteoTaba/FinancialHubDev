@@ -170,6 +170,8 @@ tbody tr:hover td{background:rgba(255,255,255,0.025)}
 
 /* Form */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+#modal-holding .modal{max-width:720px}
+@media(max-width:768px){ #modal-holding .modal{max-width:100%} }
 .form-full{grid-column:1/-1}
 .form-group{display:flex;flex-direction:column;gap:5px}
 .form-group label{font-size:12px;color:var(--text2);font-weight:500}
@@ -350,7 +352,7 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
 .cf-type-btn:hover{background:var(--surface2);color:var(--text)}
 .cf-type-btn.active[data-type="expense"]{background:var(--red-bg);color:var(--red);border-color:var(--red)}
 .cf-type-btn.active[data-type="income"]{background:var(--green-bg);color:var(--green);border-color:var(--green)}
-.cf-type-btn.active[data-type="transfer"]{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+.cf-type-btn.active[data-type="transfer"]{background:rgba(249,115,22,0.12);color:#f97316;border-color:#f97316}
 .cf-type-btn.active[data-ctx]{background:var(--accent);color:#0e1117;border-color:var(--accent);box-shadow:0 2px 8px rgba(16,212,176,0.25);font-weight:600}
 .cf-type-btn.active[data-itype="purchase"]{background:rgba(14,165,233,0.12);color:#0ea5e9;border-color:#0ea5e9}
 .cf-type-btn.active[data-itype="sale"]{background:rgba(245,158,11,0.12);color:#f59e0b;border-color:#f59e0b}
@@ -705,8 +707,11 @@ html, body {
             </div>
             <div class="form-group">
               <label>Date &amp; time</label>
-              <input type="text" id="cf-date" placeholder="dd/mm/yyyy hh:mm" oninput="parseDateInput(this)">
-              <span style="font-size:11px;color:var(--text3)" id="cf-date-preview"></span>
+              <button type="button" class="date-field" id="cf-date-trigger" onclick="openCfDatePicker()" style="width:100%">
+                <i class="ti ti-calendar"></i>
+                <span id="cf-date-label">dd/mm/yyyy hh:mm</span>
+              </button>
+              <input type="hidden" id="cf-date">
             </div>
             <div class="form-group form-full" id="cf-from-wrap">
               <label id="cf-from-label">From account</label>
@@ -1255,9 +1260,14 @@ html, body {
     </div>
     <div class="dp-weekdays"><span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span></div>
     <div class="dp-days" id="dp-days"></div>
+    <div class="dp-time-row" id="dp-time-row" style="display:none;margin-top:0.9rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+      <label style="font-size:10.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;display:block;margin-bottom:6px">Time</label>
+      <input type="time" id="dp-time-input" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;box-sizing:border-box">
+    </div>
     <div class="dp-footer">
-      <button type="button" class="dp-link" onclick="dpClear()">Clear</button>
+      <button type="button" class="dp-link" id="dp-clear-btn" onclick="dpClear()">Clear</button>
       <button type="button" class="dp-link accent" onclick="dpToday()">Today</button>
+      <button type="button" class="btn btn-sm btn-primary" id="dp-done-btn" style="display:none" onclick="dpConfirmDateTime()">Done</button>
     </div>
   </div>
 </div>
@@ -1437,28 +1447,58 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
 
 // ── Custom themed date-picker (replaces native <input type=date>) ──
-const dpState = { field:null, onChange:null, viewYear:null, viewMonth:null, value:'' }; // value is ISO 'YYYY-MM-DD' or ''
+const dpState = { field:null, onChange:null, viewYear:null, viewMonth:null, value:'', withTime:false }; // value is ISO 'YYYY-MM-DD' or ''
 
 function fmtDateDDMMYYYY(iso){
   if(!iso) return '';
   const [y,m,d] = iso.split('-');
   return `${d}/${m}/${y}`;
 }
+function fmtDateTimeDDMMYYYY(v){
+  if(!v) return '';
+  const [datePart, timePart] = v.split('T');
+  return fmtDateDDMMYYYY(datePart) + (timePart ? ' '+timePart : '');
+}
 function isoToday(){
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
 }
 
-// field: a unique key (e.g. 'alltx-from'); currentValue: ISO string or ''; onChange: fn(newIsoValueOrEmpty)
-function openDatePicker(field, currentValue, onChange){
+// field: a unique key; currentValue: ISO 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM' (if withTime) or ''
+// onChange: fn(newValue). opts: {withTime:true} to also show a time selector and require a Done tap to confirm.
+function openDatePicker(field, currentValue, onChange, opts={}){
   dpState.field = field;
   dpState.onChange = onChange;
-  dpState.value = currentValue || '';
-  const base = currentValue ? new Date(currentValue+'T00:00:00') : new Date();
+  dpState.withTime = !!opts.withTime;
+  let datePart = currentValue || '', timePart = '';
+  if(currentValue && currentValue.includes('T')){
+    [datePart, timePart] = currentValue.split('T');
+  }
+  dpState.value = datePart;
+  const base = datePart ? new Date(datePart+'T00:00:00') : new Date();
   dpState.viewYear = base.getFullYear();
   dpState.viewMonth = base.getMonth();
+
+  document.getElementById('dp-time-row').style.display  = dpState.withTime ? '' : 'none';
+  document.getElementById('dp-clear-btn').style.display = dpState.withTime ? 'none' : '';
+  document.getElementById('dp-done-btn').style.display  = dpState.withTime ? '' : 'none';
+  if(dpState.withTime){
+    if(!timePart){
+      const now = new Date();
+      timePart = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    }
+    document.getElementById('dp-time-input').value = timePart;
+  }
+
   renderDatePicker();
   openModal('modal-datepicker');
+}
+function dpConfirmDateTime(){
+  if(!dpState.value) return; // a date must be selected
+  const time = document.getElementById('dp-time-input').value || '00:00';
+  const combined = dpState.value + 'T' + time;
+  if(typeof dpState.onChange==='function') dpState.onChange(combined);
+  closeModal('modal-datepicker');
 }
 function dpChangeMonth(delta){
   dpState.viewMonth += delta;
@@ -1499,6 +1539,10 @@ function renderDatePicker(){
 }
 function dpSelectDay(iso){
   dpState.value = iso;
+  if(dpState.withTime){
+    renderDatePicker(); // just refresh the selection highlight, keep the picker open for time entry
+    return;
+  }
   if(typeof dpState.onChange==='function') dpState.onChange(iso);
   closeModal('modal-datepicker');
 }
@@ -1775,12 +1819,12 @@ function updateCostModeUI(){
     return;
   }
   if(hCostMode==='unit'){
-    label.textContent  = 'Average cost per unit (€)';
-    toggle.textContent = 'Enter total cost instead';
+    label.textContent  = 'Avg cost per unit (€)';
+    toggle.textContent = 'Use total cost';
     hint.style.display = 'none';
   } else {
     label.textContent  = 'Total cost paid (€)';
-    toggle.textContent = 'Enter cost per unit instead';
+    toggle.textContent = 'Use per-unit cost';
     hint.textContent   = "We'll work out the per-unit cost from the quantity you entered above.";
     hint.style.display = '';
   }
@@ -2945,9 +2989,9 @@ const DEFAULT_CATS=[
   {name:'Salary',icon:'ti-briefcase',color:'#10b981'},
   {name:'Investment',icon:'ti-trending-up',color:'#0ea5e9'},
 ];
-const TYPE_COLOR_CF={expense:'var(--red)',income:'var(--green)',transfer:'var(--accent)',purchase:'#0ea5e9',sale:'#f59e0b'};
+const TYPE_COLOR_CF={expense:'var(--red)',income:'var(--green)',transfer:'#f97316',purchase:'#0ea5e9',sale:'#f59e0b'};
 const TYPE_ICON_CF={expense:'ti-arrow-up-right',income:'ti-arrow-down-left',transfer:'ti-arrows-exchange',purchase:'ti-shopping-cart',sale:'ti-coin'};
-const TYPE_BG_CF={expense:'var(--red-bg)',income:'var(--green-bg)',transfer:'rgba(99,102,241,0.12)',purchase:'rgba(14,165,233,0.12)',sale:'rgba(245,158,11,0.12)'};
+const TYPE_BG_CF={expense:'var(--red-bg)',income:'var(--green-bg)',transfer:'rgba(249,115,22,0.12)',purchase:'rgba(14,165,233,0.12)',sale:'rgba(245,158,11,0.12)'};
 
 async function loadCashflow(){
   [cfCategories,cfTransactions,cfRecurrences]=await Promise.all([
@@ -3407,6 +3451,18 @@ function updatePnl(){
   el.innerHTML=`<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:600">${pnl>=0?'+':''}${fmt(pnl)} (${fmtPct(pct)})</span> vs avg cost of ${fmt(h.avg_cost)}/unit`;
 }
 
+function openCfDatePicker(){
+  openDatePicker('cf-date', document.getElementById('cf-date').value, v=>{
+    document.getElementById('cf-date').value = v;
+    updateCfDateLabel();
+  }, {withTime:true});
+}
+function updateCfDateLabel(){
+  const el = document.getElementById('cf-date-label');
+  const v  = document.getElementById('cf-date').value;
+  if(el) el.textContent = v ? fmtDateTimeDDMMYYYY(v) : 'dd/mm/yyyy hh:mm';
+}
+
 function populateCfForm(tx=null){
   // tx = optional existing transaction to pre-fill (edit mode)
   const now=new Date(); now.setSeconds(0,0);
@@ -3414,6 +3470,7 @@ function populateCfForm(tx=null){
 
   // Dates
   document.getElementById('cf-date').value = tx ? new Date(tx.date).toISOString().slice(0,16) : iso;
+  updateCfDateLabel();
   document.getElementById('cf-recur-start').value=iso;
   document.getElementById('cf-recurring').checked=false;
   document.getElementById('cf-recurring-opts').style.display='none';
