@@ -1192,8 +1192,12 @@ html, body {
         <input type="number" inputmode="decimal" id="h-qty" placeholder="0" step="any" min="0">
       </div>
       <div class="form-group">
-        <label id="h-cost-label">Current balance (€)</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <label id="h-cost-label" style="margin-bottom:0">Current balance (€)</label>
+          <button type="button" id="h-cost-mode-toggle" onclick="toggleCostMode()" style="display:none;background:none;border:none;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:0;white-space:nowrap">Enter total cost instead</button>
+        </div>
         <input type="number" inputmode="decimal" id="h-cost" placeholder="0.00" step="any" min="0">
+        <div id="h-cost-hint" style="display:none;font-size:11px;color:var(--text3);margin-top:4px"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1739,15 +1743,47 @@ function renderCategoryDetail(type){
 // ── Ticker search ──
 let tickerSearchTimeout = null;
 
+let hCostMode = 'unit'; // 'unit' = average cost per unit, 'total' = total amount paid
+
 function onHoldingTypeChange(type){
   const isSimple = type==='bank' || type==='cash';
   document.getElementById('h-name-wrap').style.display  = isSimple ? '' : 'none';
   document.getElementById('h-ticker-wrap').style.display = isSimple ? 'none' : '';
   document.getElementById('h-qty-wrap').style.display    = isSimple ? 'none' : '';
   document.getElementById('h-name-label').textContent    = type==='bank' ? 'Account name' : 'Label';
-  document.getElementById('h-cost-label').textContent    = isSimple ? 'Current balance (€)' : 'Average cost per unit (€)';
   document.getElementById('h-name').placeholder          = type==='bank' ? 'e.g. Intesa Sanpaolo' : 'e.g. Wallet cash';
+  hCostMode = 'unit';
+  document.getElementById('h-cost-mode-toggle').style.display = isSimple ? 'none' : '';
+  updateCostModeUI();
   clearTickerSelection();
+}
+
+function toggleCostMode(){
+  hCostMode = hCostMode==='unit' ? 'total' : 'unit';
+  updateCostModeUI();
+}
+
+function updateCostModeUI(){
+  const label  = document.getElementById('h-cost-label');
+  const toggle = document.getElementById('h-cost-mode-toggle');
+  const hint   = document.getElementById('h-cost-hint');
+  const type   = document.getElementById('h-type').value;
+  const isSimple = type==='bank' || type==='cash';
+  if(isSimple){
+    label.textContent  = 'Current balance (€)';
+    hint.style.display = 'none';
+    return;
+  }
+  if(hCostMode==='unit'){
+    label.textContent  = 'Average cost per unit (€)';
+    toggle.textContent = 'Enter total cost instead';
+    hint.style.display = 'none';
+  } else {
+    label.textContent  = 'Total cost paid (€)';
+    toggle.textContent = 'Enter cost per unit instead';
+    hint.textContent   = "We'll work out the per-unit cost from the quantity you entered above.";
+    hint.style.display = '';
+  }
 }
 
 function clearTickerSelection(){
@@ -1782,26 +1818,34 @@ async function searchCoinGecko(q){
 
 async function searchYahoo(q){
   const yhSearch = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
-  const proxies = [
+  const proxyFns = [
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
     u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
+    u=>`https://cors.eu.org/${u}`,
   ];
-  for(const proxy of proxies){
-    try{
-      const r = await fetch(proxy(yhSearch),{signal:AbortSignal.timeout(5000)});
-      if(!r.ok) continue;
-      const text = await r.text();
-      if(!text.startsWith('{')) continue;
-      const d = JSON.parse(text);
-      return (d?.quotes||[]).filter(q=>q.symbol && q.quoteType!=='CURRENCY').map(r=>({
-        symbol: r.symbol,
-        name: r.longname||r.shortname||r.symbol,
-        exch: r.exchDisp||r.exchange||''
-      }));
-    }catch{ continue; }
+  // Race every proxy simultaneously — use whichever responds first with valid data,
+  // instead of trying them one-by-one (which wastes time on dead/rate-limited proxies).
+  const tryProxy = async (proxyFn) => {
+    const r = await fetch(proxyFn(yhSearch), {signal: AbortSignal.timeout(6000)});
+    if(!r.ok) throw new Error('not ok');
+    const text = await r.text();
+    if(!text.startsWith('{')) throw new Error('not json');
+    const d = JSON.parse(text);
+    const results = (d?.quotes||[]).filter(q=>q.symbol && q.quoteType!=='CURRENCY').map(r=>({
+      symbol: r.symbol,
+      name: r.longname||r.shortname||r.symbol,
+      exch: r.exchDisp||r.exchange||''
+    }));
+    if(!results.length) throw new Error('no results');
+    return results;
+  };
+  try{
+    return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
+  }catch{
+    return null;
   }
-  return null;
 }
 
 async function onTickerSearch(q){
@@ -1832,8 +1876,11 @@ async function onTickerSearch(q){
       } else {
         // Use Yahoo for stocks/ETFs/bonds
         results = await searchYahoo(q);
-        if(!results){ box.innerHTML='<div class="sr-loading">Search failed — try again</div>'; return; }
-        if(!results.length){ box.innerHTML='<div class="sr-loading">No results found</div>'; return; }
+        const manualLink = manualTickerLink(q);
+        if(!results || !results.length){
+          box.innerHTML = `<div class="sr-loading">${results ? 'No results found' : 'Search failed — try again'}</div>` + manualLink;
+          return;
+        }
         box.innerHTML = results.map(r=>{
           const safeSymbol = r.symbol.replace(/'/g,'\\\'');
           const safeName   = r.name.replace(/'/g,'\\\'');
@@ -1843,12 +1890,27 @@ async function onTickerSearch(q){
             <span class="sr-name">${r.name}</span>
             <span class="sr-exch">${r.exch}</span>
           </div>`;
-        }).join('');
+        }).join('') + manualLink;
       }
     }catch(e){
-      box.innerHTML='<div class="sr-loading">Search error</div>';
+      box.innerHTML = '<div class="sr-loading">Search error</div>' + (type!=='crypto' ? manualTickerLink(q) : '');
     }
   }, 350);
+}
+
+// Fallback for when the search API is unavailable/flaky: let the user type a ticker directly.
+function manualTickerLink(q){
+  const safeQ = (q||'').replace(/'/g,"\\'");
+  return `<div onclick="selectManualTicker('${safeQ}')" style="justify-content:center;color:var(--accent);font-weight:600">
+    <i class="ti ti-edit" style="font-size:12px;margin-right:4px"></i> Can't find it? Enter ticker manually
+  </div>`;
+}
+
+async function selectManualTicker(prefill){
+  const ticker = await showInputDialog('Enter ticker symbol', 'Type the exact ticker (e.g. AAPL, VWCE.MI):', prefill||'');
+  if(ticker===null || !ticker.trim()) return;
+  const clean = ticker.trim().toUpperCase();
+  selectTicker(clean, clean, 'Manual entry');
 }
 
 // For crypto: store cgId so CoinGecko price fetch knows which coin to call
@@ -1863,12 +1925,13 @@ function selectCryptoTicker(symbol, name, cgId){
 async function saveHolding(){
   const type=document.getElementById('h-type').value;
   const isSimple = type==='bank' || type==='cash';
-  const avg_cost=parseFloat(document.getElementById('h-cost').value)||0;
+  const costInput=parseFloat(document.getElementById('h-cost').value)||0;
 
   if(isSimple){
     const name=document.getElementById('h-name').value.trim();
     if(!name){ await showAlert('Please enter an account name.'); return; }
-    if(avg_cost<=0){ await showAlert('Please enter the current balance.'); return; }
+    if(costInput<=0){ await showAlert('Please enter the current balance.'); return; }
+    const avg_cost = costInput;
     const ticker = name.toUpperCase().replace(/\s+/g,'_').slice(0,30);
     const existing = holdings.find(h=>h.ticker===ticker);
     if(existing){
@@ -1884,6 +1947,10 @@ async function saveHolding(){
     const namePart = selectedLabel.includes(' — ') ? selectedLabel.split(' — ')[1].replace(/\s*\(.*\)$/,'').trim() : ticker;
     if(!ticker){ await showAlert('Please search and select an asset first.'); return; }
     if(qty<=0){ await showAlert('Please enter a quantity.'); return; }
+    if(costInput<=0){ await showAlert(hCostMode==='total' ? 'Please enter the total cost paid.' : 'Please enter the average cost per unit.'); return; }
+    // If the person entered a TOTAL cost, convert it to a per-unit cost before storing —
+    // avg_cost is always stored per-unit in the database.
+    const avg_cost = hCostMode==='total' ? costInput/qty : costInput;
     const existing=holdings.find(h=>h.ticker===ticker);
     // Duplicate check: warn if ticker already exists as a different type
     const existingDiff=holdings.find(h=>h.ticker===ticker&&h.type!==type);
@@ -2087,8 +2154,10 @@ async function fetchYahooPrice(ticker){
   const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
   const proxyFns = [
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
     u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
+    u=>`https://cors.eu.org/${u}`,
   ];
   // Race all proxies simultaneously — use whichever responds first with valid data
   const tryProxy = async (proxyFn) => {
