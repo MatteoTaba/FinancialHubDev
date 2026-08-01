@@ -1582,7 +1582,9 @@ async function maybeTakeSnapshot(){
 function getVal(h){
   const cleanT = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
   const price = prices[cleanT] ?? prices[h.ticker];
-  return (price != null ? price : h.avg_cost) * h.qty;
+  // Dividends received are folded into the holding's value, since they're real
+  // money attributed to this position and aren't credited to any account separately.
+  return (price != null ? price : h.avg_cost) * h.qty + (h.dividends_received || 0);
 }
 
 function cleanCryptoTicker(ticker){ return ticker.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i,'').toUpperCase(); }
@@ -1703,12 +1705,14 @@ function renderCategoryDetail(type){
   const color = typeColorMap[type]||'#888';
   const icon = TYPE_ICONS[type]||'ti-wallet';
   const isSimple = type==='bank'||type==='cash';
+  const isStock = type==='stock';
   const totalPortfolio = holdings.reduce((s,h)=>s+getVal(h),0)||1;
   const catTotal = items.reduce((s,h)=>s+getVal(h),0);
   const catPct = (catTotal/totalPortfolio*100).toFixed(1);
   const catCost = isSimple ? 0 : items.reduce((s,h)=>s+getCost(h),0);
   const catGain = isSimple ? 0 : catTotal - catCost;
   const catGainPct = catCost > 0 ? catGain/catCost*100 : 0;
+  const catDividends = isStock ? items.reduce((s,h)=>s+(h.dividends_received||0),0) : 0;
   const catHasPrices = isSimple ? false : items.some(h=>{
     const t = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
     return prices[t] != null || prices[h.ticker] != null;
@@ -1731,6 +1735,13 @@ function renderCategoryDetail(type){
     const gainCell = isSimple ? '' : hasPrice
       ? `<td><span class="${gainClass}">${fmt(gain)}</span><br><span style="font-size:11px;color:${gain>=0?'var(--green)':'var(--red)'}">${fmtPct(gainPct)}</span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">—</span></td>`;
+    const divCell = isStock ? `<td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-weight:600;color:var(--blue)">${fmt(h.dividends_received||0)}</span>
+          <button class="btn btn-sm" onclick="addDividend('${h.id}','${dispName.replace(/'/g,"\\'")}',${h.dividends_received||0})" title="Add dividend received"><i class="ti ti-plus" style="font-size:11px"></i></button>
+        </div>
+        <span style="font-size:10px;color:var(--text3)">included in value</span>
+      </td>` : '';
 
     return `<tr data-hid="${h.id}">
         <td><strong style="font-weight:600">${dispName}</strong>${!isSimple?`<br><span style="color:var(--text2);font-size:12px">${dispTicker}</span>`:''}</td>
@@ -1739,6 +1750,7 @@ function renderCategoryDetail(type){
         ${priceCell}
         ${valCell}
         ${gainCell}
+        ${divCell}
         <td class="holding-actions" style="display:flex;gap:4px">
           ${isSimple?`<button class="btn btn-sm" onclick="editBalance('${h.id}','${dispName}',${h.avg_cost})" title="Edit balance"><i class="ti ti-pencil"></i></button>`:`<button class="btn btn-sm" onclick="renameHolding('${h.id}','${dispName}')" title="Rename"><i class="ti ti-pencil"></i></button>`}
           <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.id}')"><i class="ti ti-trash"></i></button>
@@ -1753,12 +1765,13 @@ function renderCategoryDetail(type){
       <td style="font-weight:700">${fmt(catTotal)}</td>
       <td><span class="${catGain>=0?'pos-bg':'neg-bg'}">${fmt(catGain)}</span><br>
         <span style="font-size:11px;color:${catGain>=0?'var(--green)':'var(--red)'}">${fmtPct(catGainPct)}</span></td>
+      ${isStock?`<td style="color:var(--blue)">${fmt(catDividends)}</td>`:''}
       <td></td>
     </tr>` : '';
 
   const thead = isSimple
     ? `<tr><th>Account</th><th>Balance</th><th></th></tr>`
-    : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th><th></th></tr>`;
+    : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th>${isStock?'<th>Dividends</th>':''}<th></th></tr>`;
 
   container.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
@@ -2065,6 +2078,16 @@ async function editBalance(id, name, currentBalance){
   if(isNaN(newBalance)||newBalance<0){ await showAlert('Please enter a valid positive amount.'); return; }
   await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance})});
   await loadAll(); toast('Balance updated ✓');
+}
+
+async function addDividend(id, name, currentTotal){
+  const input = await showInputDialog('Add dividend received', `${name} — dividend amount (€)`, '');
+  if(input===null||input.trim()==='') return;
+  const amount = parseFloat(input.replace(',','.'));
+  if(isNaN(amount)){ await showAlert('Please enter a valid amount.'); return; }
+  const newTotal = Math.max(0, currentTotal + amount);
+  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({dividends_received:newTotal})});
+  await loadAll(); toast('Dividend recorded ✓');
 }
 
 async function deleteHolding(id){
