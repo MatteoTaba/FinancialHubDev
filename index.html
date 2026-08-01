@@ -1731,7 +1731,11 @@ function renderCategoryDetail(type){
     const priceCell = isSimple ? '' : hasPrice
       ? `<td><span style="display:inline-flex;align-items:center;gap:5px;font-weight:500">${fmt(price)}<span style="font-size:10px;background:var(--green-bg);color:var(--green);border-radius:3px;padding:1px 5px;font-weight:600">LIVE</span></span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">— no price</span></td>`;
-    const valCell = `<td style="font-weight:700">${fmt(getVal(h))}${!isSimple && !hasPrice ? '<br><span style="font-size:10px;color:var(--text3)">est. cost basis</span>' : ''}</td>`;
+    const stockOnlyVal = (price != null ? price : h.avg_cost) * h.qty;
+    const valCell = `<td style="font-weight:700">${fmt(getVal(h))}${
+      isStock ? `<br><span style="font-size:10px;color:var(--text3);font-weight:400">stock only: ${fmt(stockOnlyVal)}</span>` :
+      (!isSimple && !hasPrice ? '<br><span style="font-size:10px;color:var(--text3)">est. cost basis</span>' : '')
+    }</td>`;
     const gainCell = isSimple ? '' : hasPrice
       ? `<td><span class="${gainClass}">${fmt(gain)}</span><br><span style="font-size:11px;color:${gain>=0?'var(--green)':'var(--red)'}">${fmtPct(gainPct)}</span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">—</span></td>`;
@@ -1740,7 +1744,6 @@ function renderCategoryDetail(type){
           <span style="font-weight:600;color:var(--blue)">${fmt(h.dividends_received||0)}</span>
           <button class="btn btn-sm" onclick="addDividend('${h.id}','${dispName.replace(/'/g,"\\'")}',${h.dividends_received||0})" title="Add dividend received"><i class="ti ti-plus" style="font-size:11px"></i></button>
         </div>
-        <span style="font-size:10px;color:var(--text3)">included in value</span>
       </td>` : '';
 
     return `<tr data-hid="${h.id}">
