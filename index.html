@@ -239,7 +239,7 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
 .empty p{font-size:14px}
 
 /* Alloc grid */
-.alloc-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.alloc-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
 .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
 .legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
@@ -1097,6 +1097,13 @@ html, body {
           </div>
         </div>
         <div class="card">
+          <div class="card-title">By investment family</div>
+          <div class="card-sub">Stocks, ETFs, crypto &amp; bonds — by family</div>
+          <div id="alloc-family-container" style="width:100%;min-height:200px;display:flex;align-items:center;justify-content:center">
+            <div class="spin" style="width:24px;height:24px"></div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-title">Investment portfolio breakdown</div>
           <div class="card-sub">Stocks, ETFs, crypto &amp; bonds only</div>
           <div id="alloc-hold-container" style="width:100%;min-height:200px;display:flex;align-items:center;justify-content:center">
@@ -1348,8 +1355,8 @@ if(typeof Chart!=='undefined'){
   Chart.defaults.font.size=11;
 }
 
-const TYPE_LABELS = {bank:'Bank',bond:'Bond',cash:'Cash',crypto:'Crypto',etf:'ETF',stock:'Stock'};
-const TYPE_ICONS  = {bank:'ti-building-bank',bond:'ti-certificate',cash:'ti-cash',crypto:'ti-currency-bitcoin',etf:'ti-trending-up',stock:'ti-chart-candle'};
+const TYPE_LABELS = {bank:'Bank',bond:'Bond',cash:'Cash',crypto:'Crypto',dividend:'Dividends',etf:'ETF',stock:'Stock'};
+const TYPE_ICONS  = {bank:'ti-building-bank',bond:'ti-certificate',cash:'ti-cash',crypto:'ti-currency-bitcoin',dividend:'ti-coin',etf:'ti-trending-up',stock:'ti-chart-candle'};
 const PALETTE = ['#6366f1','#10b981','#f59e0b','#ec4899','#0ea5e9','#84cc16','#f97316','#8b5cf6','#06b6d4','#a3e635'];
 
 function fmt(n){
@@ -1640,7 +1647,7 @@ function chooseSelectOption(el){
 }
 
 function accountOptionsList(){
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   return holdings.map(h=>{
     const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
     return {value:h.id, label:`${n} (${TYPE_LABELS[h.type]||h.type})`, icon:TYPE_ICONS[h.type], color:typeColorMap[h.type]};
@@ -1684,12 +1691,13 @@ function setTriggerIcon(iconId, icon, color){
 
 // ── Add Holding: asset type picker ──
 const H_TYPE_OPTIONS = [
-  {value:'bank',   label:'Bank account',        icon:'ti-building-bank',      color:'#0ea5e9'},
-  {value:'bond',   label:'Bond / Fixed income', icon:'ti-certificate',        color:'#ec4899'},
-  {value:'cash',   label:'Cash',                icon:'ti-cash',               color:'#84cc16'},
-  {value:'crypto', label:'Crypto',               icon:'ti-currency-bitcoin',  color:'#f59e0b'},
-  {value:'etf',    label:'ETF',                  icon:'ti-trending-up',       color:'#10b981'},
-  {value:'stock',  label:'Stock',                icon:'ti-chart-candle',      color:'#6366f1'},
+  {value:'bank',     label:'Bank account',        icon:'ti-building-bank',      color:'#0ea5e9'},
+  {value:'bond',     label:'Bond / Fixed income', icon:'ti-certificate',        color:'#ec4899'},
+  {value:'cash',     label:'Cash',                icon:'ti-cash',               color:'#84cc16'},
+  {value:'crypto',   label:'Crypto',               icon:'ti-currency-bitcoin',  color:'#f59e0b'},
+  {value:'dividend', label:'Dividends',            icon:'ti-coin',              color:'#60a8f5'},
+  {value:'etf',      label:'ETF',                  icon:'ti-trending-up',       color:'#10b981'},
+  {value:'stock',    label:'Stock',                icon:'ti-chart-candle',      color:'#6366f1'},
 ];
 function openHTypePicker(){
   const current = document.getElementById('h-type').value;
@@ -1754,7 +1762,7 @@ function openInvAssetPicker(){
 
 function invCounterpartOptionsList(){
   const selectedId = document.getElementById('inv-asset').value;
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   return holdings.filter(h=>h.id!==selectedId).map(h=>{
     const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
     return {value:h.id, label:`${n} (${TYPE_LABELS[h.type]||h.type})`, icon:TYPE_ICONS[h.type], color:typeColorMap[h.type]};
@@ -1830,9 +1838,7 @@ async function maybeTakeSnapshot(){
 function getVal(h){
   const cleanT = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
   const price = prices[cleanT] ?? prices[h.ticker];
-  // Dividends received are folded into the holding's value, since they're real
-  // money attributed to this position and aren't credited to any account separately.
-  return (price != null ? price : h.avg_cost) * h.qty + (h.dividends_received || 0);
+  return (price != null ? price : h.avg_cost) * h.qty;
 }
 
 function cleanCryptoTicker(ticker){ return ticker.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i,'').toUpperCase(); }
@@ -1849,7 +1855,7 @@ function renderHoldings(){
   emptyState.style.display='none';
 
   // Update subtitle with price freshness
-  const investmentHoldings = holdings.filter(h=>!['bank','cash'].includes(h.type));
+  const investmentHoldings = holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
   const priceCount = investmentHoldings.filter(h=>prices[h.ticker]).length;
   const lastUpdated = document.getElementById('refresh-info').textContent;
   if(investmentHoldings.length===0){
@@ -1866,7 +1872,7 @@ function renderHoldings(){
   const byType = {};
   holdings.forEach(h=>{ if(!byType[h.type]) byType[h.type]=[]; byType[h.type].push(h); });
   const totalPortfolio = holdings.reduce((s,h)=>s+getVal(h),0)||1;
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
 
   // Sort categories alphabetically
   const sortedTypes = Object.keys(byType).sort((a,b)=>(TYPE_LABELS[a]||a).localeCompare(TYPE_LABELS[b]||b));
@@ -1878,7 +1884,7 @@ function renderHoldings(){
     const catPct   = (catTotal/totalPortfolio*100).toFixed(1);
     const color    = typeColorMap[type]||'#888';
     const icon     = TYPE_ICONS[type]||'ti-wallet';
-    const isSimple = type==='bank'||type==='cash';
+    const isSimple = type==='bank'||type==='cash'||type==='dividend';
 
     // Category-level gain/loss (only for investment types)
     const catCost = isSimple ? 0 : items.reduce((s,h)=>s+getCost(h),0);
@@ -1949,18 +1955,16 @@ function renderCategoryDetail(type){
   if(!container) return;
   const items = holdings.filter(h=>h.type===type);
   if(!items.length){ closeCategoryDetail(); return; }
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   const color = typeColorMap[type]||'#888';
   const icon = TYPE_ICONS[type]||'ti-wallet';
-  const isSimple = type==='bank'||type==='cash';
-  const isStock = type==='stock';
+  const isSimple = type==='bank'||type==='cash'||type==='dividend';
   const totalPortfolio = holdings.reduce((s,h)=>s+getVal(h),0)||1;
   const catTotal = items.reduce((s,h)=>s+getVal(h),0);
   const catPct = (catTotal/totalPortfolio*100).toFixed(1);
   const catCost = isSimple ? 0 : items.reduce((s,h)=>s+getCost(h),0);
   const catGain = isSimple ? 0 : catTotal - catCost;
   const catGainPct = catCost > 0 ? catGain/catCost*100 : 0;
-  const catDividends = isStock ? items.reduce((s,h)=>s+(h.dividends_received||0),0) : 0;
   const catHasPrices = isSimple ? false : items.some(h=>{
     const t = h.type==='crypto' ? cleanCryptoTicker(h.ticker) : h.ticker;
     return prices[t] != null || prices[h.ticker] != null;
@@ -1979,20 +1983,10 @@ function renderCategoryDetail(type){
     const priceCell = isSimple ? '' : hasPrice
       ? `<td><span style="display:inline-flex;align-items:center;gap:5px;font-weight:500">${fmt(price)}<span style="font-size:10px;background:var(--green-bg);color:var(--green);border-radius:3px;padding:1px 5px;font-weight:600">LIVE</span></span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">— no price</span></td>`;
-    const stockOnlyVal = (price != null ? price : h.avg_cost) * h.qty;
-    const valCell = `<td style="font-weight:700">${fmt(getVal(h))}${
-      isStock ? `<br><span style="font-size:10px;color:var(--text3);font-weight:400">stock only: ${fmt(stockOnlyVal)}</span>` :
-      (!isSimple && !hasPrice ? '<br><span style="font-size:10px;color:var(--text3)">est. cost basis</span>' : '')
-    }</td>`;
+    const valCell = `<td style="font-weight:700">${fmt(getVal(h))}${!isSimple && !hasPrice ? '<br><span style="font-size:10px;color:var(--text3)">est. cost basis</span>' : ''}</td>`;
     const gainCell = isSimple ? '' : hasPrice
       ? `<td><span class="${gainClass}">${fmt(gain)}</span><br><span style="font-size:11px;color:${gain>=0?'var(--green)':'var(--red)'}">${fmtPct(gainPct)}</span></td>`
       : `<td><span style="color:var(--text3);font-size:12px">—</span></td>`;
-    const divCell = isStock ? `<td>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-weight:600;color:var(--blue)">${fmt(h.dividends_received||0)}</span>
-          <button class="btn btn-sm" onclick="addDividend('${h.id}','${dispName.replace(/'/g,"\\'")}',${h.dividends_received||0})" title="Add dividend received"><i class="ti ti-plus" style="font-size:11px"></i></button>
-        </div>
-      </td>` : '';
 
     return `<tr data-hid="${h.id}">
         <td><strong style="font-weight:600">${dispName}</strong>${!isSimple?`<br><span style="color:var(--text2);font-size:12px">${dispTicker}</span>`:''}</td>
@@ -2001,7 +1995,6 @@ function renderCategoryDetail(type){
         ${priceCell}
         ${valCell}
         ${gainCell}
-        ${divCell}
         <td class="holding-actions" style="display:flex;gap:4px">
           ${isSimple?`<button class="btn btn-sm" onclick="editBalance('${h.id}','${dispName}',${h.avg_cost})" title="Edit balance"><i class="ti ti-pencil"></i></button>`:`<button class="btn btn-sm" onclick="renameHolding('${h.id}','${dispName}')" title="Rename"><i class="ti ti-pencil"></i></button>`}
           <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.id}')"><i class="ti ti-trash"></i></button>
@@ -2016,13 +2009,12 @@ function renderCategoryDetail(type){
       <td style="font-weight:700">${fmt(catTotal)}</td>
       <td><span class="${catGain>=0?'pos-bg':'neg-bg'}">${fmt(catGain)}</span><br>
         <span style="font-size:11px;color:${catGain>=0?'var(--green)':'var(--red)'}">${fmtPct(catGainPct)}</span></td>
-      ${isStock?`<td style="color:var(--blue)">${fmt(catDividends)}</td>`:''}
       <td></td>
     </tr>` : '';
 
   const thead = isSimple
     ? `<tr><th>Account</th><th>Balance</th><th></th></tr>`
-    : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th>${isStock?'<th>Dividends</th>':''}<th></th></tr>`;
+    : `<tr><th>Asset</th><th>Qty</th><th>Avg cost</th><th>Live price</th><th>Current value</th><th>Gain / loss</th><th></th></tr>`;
 
   container.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
@@ -2054,12 +2046,12 @@ let tickerSearchTimeout = null;
 let hCostMode = 'unit'; // 'unit' = average cost per unit, 'total' = total amount paid
 
 function onHoldingTypeChange(type){
-  const isSimple = type==='bank' || type==='cash';
+  const isSimple = type==='bank' || type==='cash' || type==='dividend';
   document.getElementById('h-name-wrap').style.display  = isSimple ? '' : 'none';
   document.getElementById('h-ticker-wrap').style.display = isSimple ? 'none' : '';
   document.getElementById('h-qty-wrap').style.display    = isSimple ? 'none' : '';
   document.getElementById('h-name-label').textContent    = type==='bank' ? 'Account name' : 'Label';
-  document.getElementById('h-name').placeholder          = type==='bank' ? 'e.g. Intesa Sanpaolo' : 'e.g. Wallet cash';
+  document.getElementById('h-name').placeholder          = type==='bank' ? 'e.g. Intesa Sanpaolo' : type==='dividend' ? 'e.g. AAPL Dividends' : 'e.g. Wallet cash';
   hCostMode = 'unit';
   document.getElementById('h-cost-mode-toggle').style.display = isSimple ? 'none' : '';
   updateCostModeUI();
@@ -2076,7 +2068,7 @@ function updateCostModeUI(){
   const toggle = document.getElementById('h-cost-mode-toggle');
   const hint   = document.getElementById('h-cost-hint');
   const type   = document.getElementById('h-type').value;
-  const isSimple = type==='bank' || type==='cash';
+  const isSimple = type==='bank' || type==='cash' || type==='dividend';
   if(isSimple){
     label.textContent  = 'Current balance (€)';
     hint.style.display = 'none';
@@ -2249,7 +2241,7 @@ function selectCryptoTicker(symbol, name, cgId){
 
 async function saveHolding(){
   const type=document.getElementById('h-type').value;
-  const isSimple = type==='bank' || type==='cash';
+  const isSimple = type==='bank' || type==='cash' || type==='dividend';
   const costInput=parseFloat(document.getElementById('h-cost').value)||0;
 
   if(isSimple){
@@ -2331,15 +2323,6 @@ async function editBalance(id, name, currentBalance){
   await loadAll(); toast('Balance updated ✓');
 }
 
-async function addDividend(id, name, currentTotal){
-  const input = await showInputDialog('Add dividend received', `${name} — dividend amount (€)`, '');
-  if(input===null||input.trim()==='') return;
-  const amount = parseFloat(input.replace(',','.'));
-  if(isNaN(amount)){ await showAlert('Please enter a valid amount.'); return; }
-  const newTotal = Math.max(0, currentTotal + amount);
-  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({dividends_received:newTotal})});
-  await loadAll(); toast('Dividend recorded ✓');
-}
 
 async function deleteHolding(id){
   const linkedTxCount = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
@@ -2533,7 +2516,7 @@ const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let lastPriceFetch = 0;
 
 async function refreshPrices(force=false, silent=false){
-  const investable = holdings.filter(h=>!['bank','cash'].includes(h.type));
+  const investable = holdings.filter(h=>!['bank','cash','dividend'].includes(h.type));
   if(!investable.length){ renderHoldings(); return; }
 
   // Use cached prices if fresh enough and not forced
@@ -3110,7 +3093,7 @@ function renderAllocation(){
   const dimColor=dark?'#94a3b8':'#6b7280';
   const total=holdings.reduce((s,h)=>s+getVal(h),0)||1;
 
-  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   // By asset type — all holdings
   const byType={};
   holdings.forEach(h=>{ byType[h.type]=(byType[h.type]||0)+getVal(h); });
@@ -3121,6 +3104,19 @@ function renderAllocation(){
   const invTypes=['stock','etf','crypto','bond'];
   const invHoldings=holdings.filter(h=>invTypes.includes(h.type));
   const invTotal=invHoldings.reduce((s,h)=>s+getVal(h),0)||1;
+
+  // By investment family — same investment-only scope as the chart above, but grouped
+  // by asset type (crypto/etf/stock/bond) rather than by individual asset.
+  const byFamily={};
+  invHoldings.forEach(h=>{ byFamily[h.type]=(byFamily[h.type]||0)+getVal(h); });
+  const familySlices=Object.keys(byFamily).map(k=>({label:TYPE_LABELS[k]||k,value:byFamily[k],color:typeColorMap[k]||'#888'}));
+  if(familySlices.length){
+    renderDonutSVG('alloc-family-container', familySlices, invTotal, textColor, dimColor);
+  } else {
+    const cf=document.getElementById('alloc-family-container');
+    if(cf) cf.innerHTML='<div class="empty" style="padding:2rem"><i class="ti ti-briefcase"></i><p>No investment holdings yet</p></div>';
+  }
+
   const holdSlices=invHoldings.map((h,i)=>({
     label:h.type==='crypto'?cleanCryptoTicker(h.ticker):h.ticker.toUpperCase(),
     value:getVal(h),
@@ -3378,7 +3374,7 @@ function renderCashflow(){
   if(!cfSearchQuery) closeCfSearch();
   const container=document.getElementById('cf-accounts'); if(!container) return;
   if(!holdings.length){container.innerHTML='<div class="card"><div class="empty"><i class="ti ti-wallet"></i><p>No holdings yet.</p></div></div>';return;}
-  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap={bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   // Group by type
   const byType={};
   holdings.forEach(h=>{if(!byType[h.type])byType[h.type]=[];byType[h.type].push(h);});
@@ -4407,7 +4403,7 @@ function onCfSearch(q){
     return;
   }
   // Group by holding
-  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',dividend:'#60a8f5',etf:'#10b981',stock:'#6366f1'};
   const grouped = {};
   results.forEach(t=>{
     const hId = t.holding_id || '__none__';
