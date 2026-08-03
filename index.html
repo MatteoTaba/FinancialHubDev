@@ -87,7 +87,7 @@ body.page-holdings #live-price-indicator{display:flex}
 
 /* ── Chart card ── */
 .card{background:linear-gradient(145deg,rgba(22,25,39,1),rgba(20,22,35,1));border:1px solid rgba(38,45,61,0.6);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1.25rem;box-shadow:var(--card-shadow)}
-.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;gap:10px}
 .card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-0.2px;font-family:'Outfit',sans-serif}
 .card-sub{font-size:11px;color:var(--text2);margin-top:2px}
 .chart-wrap{position:relative;width:100%}
@@ -97,6 +97,9 @@ body.page-holdings #live-price-indicator{display:flex}
 .period-btn{padding:4px 11px;border-radius:4px;border:none;background:none;font-size:11px;color:var(--text3);cursor:pointer;font-family:inherit;transition:all 0.12s;font-weight:500}
 .period-btn:hover{color:var(--text2)}
 .period-btn.active{background:var(--surface3);color:var(--accent);font-weight:600}
+@media(max-width:768px){
+  .period-btn{padding:4px 7px;font-size:10px}
+}
 
 /* ── Holding boxes ── */
 .holding-grid{display:grid;gap:12px;margin-bottom:1.25rem}@media(max-width:768px){.holding-grid{grid-template-columns:repeat(2,1fr)!important}}
@@ -800,15 +803,15 @@ html, body {
               <div class="form-grid" style="margin-bottom:0">
                 <div class="form-group">
                   <label>Quantity purchased</label>
-                  <input type="number" inputmode="decimal" id="inv-qty" placeholder="0" step="any" min="0" oninput="calcInvTotal()">
+                  <input type="number" inputmode="decimal" id="inv-qty" placeholder="0" step="any" min="0" oninput="calcPurchaseFromUnit()">
                 </div>
                 <div class="form-group">
                   <label>Price per unit (€)</label>
-                  <input type="number" inputmode="decimal" id="inv-price" placeholder="0.00" step="any" min="0" oninput="calcInvTotal()">
+                  <input type="number" inputmode="decimal" id="inv-price" placeholder="0.00" step="any" min="0" oninput="calcPurchaseFromUnit()">
                 </div>
                 <div class="form-group form-full">
                   <label>Total cost (€)</label>
-                  <input type="number" inputmode="decimal" id="inv-total" placeholder="0.00" step="any" min="0" oninput="calcInvFromTotal()">
+                  <input type="number" inputmode="decimal" id="inv-total" placeholder="0.00" step="any" min="0" oninput="calcPurchaseFromTotal()">
                 </div>
                 <div class="form-group form-full">
                   <label>Purchased with</label>
@@ -825,11 +828,11 @@ html, body {
               <div class="form-grid" style="margin-bottom:0">
                 <div class="form-group">
                   <label>Quantity sold</label>
-                  <input type="number" inputmode="decimal" id="inv-sale-qty" placeholder="0" step="any" min="0" oninput="calcSaleTotal()">
+                  <input type="number" inputmode="decimal" id="inv-sale-qty" placeholder="0" step="any" min="0" oninput="calcSaleFromUnit()">
                 </div>
                 <div class="form-group">
                   <label>Price per unit (€)</label>
-                  <input type="number" inputmode="decimal" id="inv-sale-price" placeholder="0.00" step="any" min="0" oninput="calcSaleTotal()">
+                  <input type="number" inputmode="decimal" id="inv-sale-price" placeholder="0.00" step="any" min="0" oninput="calcSaleFromUnit()">
                 </div>
                 <div class="form-group form-full">
                   <label>Total revenue (€)</label>
@@ -1186,12 +1189,13 @@ html, body {
     <div class="modal-title" id="cat-modal-title">Add category</div>
     <input type="hidden" id="cat-edit-id">
     <input type="hidden" id="cat-icon" value="ti-tag">
+    <input type="hidden" id="cat-parent">
     <!-- Preview + Name row -->
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:1.25rem">
       <div id="cat-icon-preview" style="width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;transition:background 0.2s,color 0.2s;background:rgba(99,102,241,0.15);color:#6366f1"><i class="ti ti-tag"></i></div>
       <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         <input type="text" id="cat-name" placeholder="Category name" style="border:1px solid var(--border2);border-radius:var(--radius-sm);padding:9px 11px;font-size:15px;font-weight:600;background:var(--surface2);color:var(--text);font-family:inherit">
-        <div style="display:flex;align-items:center;gap:8px">
+        <div id="cat-color-row" style="display:flex;align-items:center;gap:8px">
           <label style="font-size:12px;color:var(--text2);flex-shrink:0">Colour</label>
           <label style="position:relative;cursor:pointer;display:flex;align-items:center;gap:6px">
             <span id="cat-color-swatch" style="display:inline-block;width:28px;height:28px;border-radius:6px;border:2px solid var(--border2);background:#6366f1;flex-shrink:0"></span>
@@ -1201,9 +1205,20 @@ html, body {
         </div>
       </div>
     </div>
+    <!-- Parent category -->
+    <div class="form-group form-full" style="margin-bottom:1.25rem">
+      <label>Parent category (optional)</label>
+      <button type="button" class="select-field" id="cat-parent-trigger" onclick="openCatParentPicker()" style="width:100%">
+        <span id="cat-parent-label" style="flex:1;text-align:left">None — top-level category</span>
+        <i class="ti ti-chevron-down"></i>
+      </button>
+      <div id="cat-parent-hint" style="display:none;font-size:11px;color:var(--text3);margin-top:4px">Sub-categories use their parent's icon and colour.</div>
+    </div>
     <!-- Icon grid -->
-    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Pick an icon</div>
-    <div id="cat-icon-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;max-height:180px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:6px"></div>
+    <div id="cat-icon-section">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Pick an icon</div>
+      <div id="cat-icon-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;max-height:180px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:6px"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-cat')">Cancel</button>
       <button class="btn btn-primary" onclick="saveCat()">Save</button>
@@ -1636,14 +1651,16 @@ function dpToday(){
 // ── Custom themed list picker (replaces native <select> for category/account) ──
 let selectModalOnChoose = null;
 function openSelectPicker(title, options, currentValue, onChoose){
-  // options: [{value, label, icon?, color?}]
+  // options: [{value, label, icon?, color?, isChild?}]
   selectModalOnChoose = onChoose;
   document.getElementById('select-modal-title').textContent = title;
   document.getElementById('select-modal-list').innerHTML = options.map(o=>{
     const isActive = String(o.value)===String(currentValue);
     const iconHtml = o.icon ? `<i class="ti ${o.icon}" style="font-size:15px;color:${o.color||'var(--text2)'};width:20px;text-align:center;flex-shrink:0"></i>` : '';
-    return `<div class="select-modal-row${isActive?' active':''}" onclick="chooseSelectOption(this)" data-value="${String(o.value).replace(/"/g,'&quot;')}">
-      <span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">${iconHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.label}</span></span>
+    const indent = o.isChild ? 'padding-left:22px' : '';
+    const labelStyle = o.isChild ? 'font-size:12.5px;color:var(--text2)' : '';
+    return `<div class="select-modal-row${isActive?' active':''}" onclick="chooseSelectOption(this)" data-value="${String(o.value).replace(/"/g,'&quot;')}" style="${indent}">
+      <span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;${labelStyle}">${iconHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.label}</span></span>
       ${isActive?'<i class="ti ti-check" style="flex-shrink:0"></i>':''}
     </div>`;
   }).join('');
@@ -1663,9 +1680,26 @@ function accountOptionsList(){
   });
 }
 
+function buildCategoryPickerOptions(){
+  const topCats = cfCategories.filter(c=>!c.parent_id).sort((a,b)=>a.name.localeCompare(b.name));
+  const options = [];
+  topCats.forEach(top=>{
+    options.push({value:top.id, label:top.name, icon:top.icon, color:top.color});
+    cfCategories.filter(c=>c.parent_id===top.id).sort((a,b)=>a.name.localeCompare(b.name)).forEach(sub=>{
+      options.push({value:sub.id, label:sub.name, icon:top.icon, color:top.color, isChild:true});
+    });
+  });
+  return options;
+}
+function getTopCategoryId(categoryId){
+  const cat = cfCategories.find(c=>c.id===categoryId);
+  if(!cat) return categoryId;
+  return cat.parent_id || cat.id;
+}
+
 function openCfCategoryPicker(){
   const current = document.getElementById('cf-cat').value;
-  const options = cfCategories.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color}));
+  const options = buildCategoryPickerOptions();
   openSelectPicker('Select category', options, current, (val)=>{
     document.getElementById('cf-cat').value = val;
     const cat = cfCategories.find(c=>c.id===val);
@@ -1810,7 +1844,7 @@ function openInvExpIncAcctPicker(){
 }
 function openInvCatPicker(){
   const current = document.getElementById('inv-cat').value;
-  const options = cfCategories.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color}));
+  const options = buildCategoryPickerOptions();
   openSelectPicker('Select category', options, current, (val)=>{
     document.getElementById('inv-cat').value = val;
     const cat = cfCategories.find(c=>c.id===val);
@@ -4203,14 +4237,25 @@ function renderRecurCalendar(){
 
 function renderSettings(){
   const catEl=document.getElementById('settings-cats');
-  if(catEl) catEl.innerHTML=cfCategories.length
-    ?cfCategories.map(c=>`<div class="settings-cat-row">
-        <i class="ti ${c.icon}" style="color:${c.color};font-size:18px;width:24px;text-align:center"></i>
-        <span style="flex:1;font-size:13px">${c.name}</span>
-        <button class="btn btn-sm" onclick="openCatModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteCat('${c.id}')"><i class="ti ti-trash"></i></button>
-      </div>`).join('')
-    :'<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No categories yet</div>';
+  if(catEl){
+    const topCats = cfCategories.filter(c=>!c.parent_id);
+    catEl.innerHTML = topCats.length ? topCats.map(c=>{
+      const subs = cfCategories.filter(s=>s.parent_id===c.id);
+      const subRows = subs.map(s=>`<div class="settings-cat-row" style="padding-left:34px">
+          <i class="ti ti-corner-down-right" style="color:var(--text3);font-size:14px;width:16px;text-align:center;flex-shrink:0"></i>
+          <span style="flex:1;font-size:13px;color:var(--text2)">${s.name}</span>
+          <button class="btn btn-sm" onclick="openCatModal('${s.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCat('${s.id}')"><i class="ti ti-trash"></i></button>
+        </div>`).join('');
+      return `<div class="settings-cat-row">
+          <i class="ti ${c.icon}" style="color:${c.color};font-size:18px;width:24px;text-align:center"></i>
+          <span style="flex:1;font-size:13px">${c.name}</span>
+          <button class="btn btn-sm" onclick="openCatModal(null,'${c.id}')" style="margin-right:4px" title="Add sub-category"><i class="ti ti-corner-down-right"></i></button>
+          <button class="btn btn-sm" onclick="openCatModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCat('${c.id}')"><i class="ti ti-trash"></i></button>
+        </div>${subRows}`;
+    }).join('') : '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No categories yet</div>';
+  }
 
   const recEl=document.getElementById('settings-recurrences');
   if(recEl) recEl.innerHTML=cfRecurrences.length
@@ -4284,13 +4329,14 @@ function updateIconPreview(icon){
   if(hexEl) hexEl.textContent=color;
 }
 
-function openCatModal(id=null){
+function openCatModal(id=null, presetParentId=null){
   document.getElementById('cat-edit-id').value=id||'';
   document.getElementById('cat-modal-title').textContent=id?'Edit category':'Add category';
   if(!id){
     document.getElementById('cat-name').value='';
     document.getElementById('cat-icon').value='ti-tag';
     document.getElementById('cat-color').value='#6366f1';
+    document.getElementById('cat-parent').value=presetParentId||'';
     updateIconPreview('ti-tag');
   } else {
     const cat=cfCategories.find(c=>c.id===id);
@@ -4298,11 +4344,42 @@ function openCatModal(id=null){
       document.getElementById('cat-name').value=cat.name;
       document.getElementById('cat-icon').value=cat.icon||'ti-tag';
       document.getElementById('cat-color').value=cat.color||'#6366f1';
+      document.getElementById('cat-parent').value=cat.parent_id||'';
       updateIconPreview(cat.icon||'ti-tag');
     }
   }
+  updateCatParentUI();
   buildIconGrid();
   openModal('modal-cat');
+}
+
+function updateCatParentUI(){
+  const parentId = document.getElementById('cat-parent').value;
+  const parent = cfCategories.find(c=>c.id===parentId);
+  document.getElementById('cat-parent-label').textContent = parent ? parent.name : 'None — top-level category';
+  const isSub = !!parent;
+  document.getElementById('cat-icon-section').style.display = isSub ? 'none' : '';
+  document.getElementById('cat-color-row').style.display = isSub ? 'none' : '';
+  document.getElementById('cat-parent-hint').style.display = isSub ? '' : 'none';
+  if(isSub){
+    document.getElementById('cat-icon').value = parent.icon||'ti-tag';
+    document.getElementById('cat-color').value = parent.color||'#6366f1';
+    updateIconPreview(parent.icon||'ti-tag');
+  }
+}
+
+function openCatParentPicker(){
+  const editId = document.getElementById('cat-edit-id').value;
+  const current = document.getElementById('cat-parent').value;
+  // Only top-level categories can be a parent — this keeps sub-categories to a single level
+  // and excluding the category itself prevents it becoming its own parent.
+  const topCats = cfCategories.filter(c=>!c.parent_id && c.id!==editId);
+  const options = [{value:'', label:'None — top-level category', icon:'ti-x', color:'var(--text3)'}]
+    .concat(topCats.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color})));
+  openSelectPicker('Parent category', options, current, (val)=>{
+    document.getElementById('cat-parent').value = val;
+    updateCatParentUI();
+  });
 }
 
 async function saveCat(){
@@ -4310,14 +4387,16 @@ async function saveCat(){
   const icon=document.getElementById('cat-icon').value.trim()||'ti-tag';
   const color=document.getElementById('cat-color').value||'#6366f1';
   const editId=document.getElementById('cat-edit-id').value;
+  const parentId=document.getElementById('cat-parent').value||null;
   if(!name){await showAlert('Please enter a name.');return;}
-  // Duplicate name check (case-insensitive, excluding current if editing)
-  const duplicate = cfCategories.find(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editId);
-  if(duplicate){await showAlert(`A category named "${duplicate.name}" already exists. Please choose a different name.`);return;}
+  if(parentId===editId){await showAlert('A category cannot be its own parent.');return;}
+  // Duplicate name check — scoped to siblings (same parent), case-insensitive, excluding current if editing
+  const duplicate = cfCategories.find(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editId&&(c.parent_id||null)===parentId);
+  if(duplicate){await showAlert(`A category named "${duplicate.name}" already exists ${parentId?'under this parent':'at the top level'}. Please choose a different name.`);return;}
   if(editId){
-    await api(`cashflow_categories?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({name,icon,color})});
+    await api(`cashflow_categories?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({name,icon,color,parent_id:parentId})});
   } else {
-    await api('cashflow_categories',{method:'POST',body:JSON.stringify({name,icon,color})});
+    await api('cashflow_categories',{method:'POST',body:JSON.stringify({name,icon,color,parent_id:parentId})});
   }
   cfCategories=await api('cashflow_categories?order=name.asc');
   closeModal('modal-cat'); renderSettings();
@@ -4327,11 +4406,20 @@ async function saveCat(){
 async function deleteCat(id){
   const usedCount = cfTransactions.filter(t=>t.category_id===id).length;
   const recurCount = cfRecurrences.filter(r=>r.category_id===id).length;
-  if(usedCount>0||recurCount>0){
-    const msg = `This category is used in ${usedCount} transaction${usedCount!==1?'s':''}${recurCount>0?` and ${recurCount} recurrence${recurCount!==1?'s':''}`:''}.\n\nDeleting it will remove the category from those transactions.\n\nProceed?`;
-    if(!await showConfirm(msg)) return;
+  const subCount = cfCategories.filter(c=>c.parent_id===id).length;
+  if(subCount>0||usedCount>0||recurCount>0){
+    const parts=[];
+    if(usedCount>0) parts.push(`${usedCount} transaction${usedCount!==1?'s':''}`);
+    if(recurCount>0) parts.push(`${recurCount} recurrence${recurCount!==1?'s':''}`);
+    let msg = parts.length ? `This category is used in ${parts.join(' and ')}. Deleting it will remove the category from those.` : '';
+    if(subCount>0) msg += `${msg?'\n\n':''}It has ${subCount} sub-categor${subCount!==1?'ies':'y'}, which will become top-level categories instead of being deleted.`;
+    if(!await showConfirm(`${msg}\n\nProceed?`)) return;
   } else {
     if(!await showConfirm('Delete this category?')) return;
+  }
+  // Sub-categories become top-level rather than being deleted along with their parent
+  if(subCount>0){
+    await api(`cashflow_categories?parent_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({parent_id:null})});
   }
   // Uncategorize all linked transactions and recurrences first
   if(usedCount>0){
@@ -4940,16 +5028,16 @@ function renderOutcomesReport(){
     if(rptFilterYear==='all') return true;
     const y=Number(rptFilterYear); return p.start.getFullYear()===y||p.end.getFullYear()===y;
   });
-  // Get all expense categories that have been used
-  const usedCatIds = new Set(allTx.filter(t=>isOutcomeTx(t)&&t.category_id).map(t=>t.category_id));
-  const cats = cfCategories.filter(c=>usedCatIds.has(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  // Get all expense categories that have been used (sub-categories roll up into their parent)
+  const usedCatIds = new Set(allTx.filter(t=>isOutcomeTx(t)&&t.category_id).map(t=>getTopCategoryId(t.category_id)));
+  const cats = cfCategories.filter(c=>usedCatIds.has(c.id)&&!c.parent_id).sort((a,b)=>a.name.localeCompare(b.name));
 
   const rows = periods.map(p=>{
     const pTxs = allTx.filter(t=>{const d=new Date(t.date);return d>=p.start&&d<=p.end&&isOutcomeTx(t);});
     const total = pTxs.reduce((s,t)=>s+t.amount,0);
     if(!total) return null;
     const byCat = {};
-    cats.forEach(c=>{ byCat[c.id]=pTxs.filter(t=>t.category_id===c.id).reduce((s,t)=>s+t.amount,0); });
+    cats.forEach(c=>{ byCat[c.id]=pTxs.filter(t=>getTopCategoryId(t.category_id)===c.id).reduce((s,t)=>s+t.amount,0); });
     const fixed = pTxs.filter(t=>t.recurring_id).reduce((s,t)=>s+t.amount,0);
     return {period:p.label, byCat, total, fixed};
   }).filter(Boolean);
