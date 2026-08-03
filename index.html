@@ -755,12 +755,11 @@ html, body {
               <div class="form-grid" style="margin-bottom:0">
                 <div class="form-group">
                   <label>Frequency</label>
-                  <select id="cf-freq">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly" selected>Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
+                  <button type="button" class="select-field" id="cf-freq-trigger" onclick="openCfFreqPicker()" style="width:100%">
+                    <span id="cf-freq-label" style="flex:1;text-align:left">Monthly</span>
+                    <i class="ti ti-chevron-down"></i>
+                  </button>
+                  <input type="hidden" id="cf-freq" value="monthly">
                 </div>
                 <div class="form-group">
                   <label>First occurrence</label>
@@ -790,7 +789,11 @@ html, body {
             <!-- Asset selector -->
             <div class="form-group form-full">
               <label>Asset</label>
-              <select id="inv-asset" onchange="onInvAssetChange()"></select>
+              <button type="button" class="select-field placeholder" id="inv-asset-trigger" onclick="openInvAssetPicker()" style="width:100%">
+                <span id="inv-asset-label" style="flex:1;text-align:left">Select asset</span>
+                <i class="ti ti-chevron-down"></i>
+              </button>
+              <input type="hidden" id="inv-asset">
             </div>
             <!-- Purchase fields -->
             <div id="inv-purchase-fields">
@@ -809,7 +812,11 @@ html, body {
                 </div>
                 <div class="form-group form-full">
                   <label>Purchased with</label>
-                  <select id="inv-paid-from"></select>
+                  <button type="button" class="select-field placeholder" id="inv-paid-from-trigger" onclick="openInvPaidFromPicker()" style="width:100%">
+                    <span id="inv-paid-from-label" style="flex:1;text-align:left">Select account</span>
+                    <i class="ti ti-chevron-down"></i>
+                  </button>
+                  <input type="hidden" id="inv-paid-from">
                 </div>
               </div>
             </div>
@@ -830,7 +837,11 @@ html, body {
                 </div>
                 <div class="form-group form-full">
                   <label>Proceeds credited to</label>
-                  <select id="inv-sale-to"></select>
+                  <button type="button" class="select-field placeholder" id="inv-sale-to-trigger" onclick="openInvSaleToPicker()" style="width:100%">
+                    <span id="inv-sale-to-label" style="flex:1;text-align:left">Select account</span>
+                    <i class="ti ti-chevron-down"></i>
+                  </button>
+                  <input type="hidden" id="inv-sale-to">
                 </div>
                 <!-- P&L preview -->
                 <div class="form-group form-full" id="inv-pnl-preview" style="display:none">
@@ -851,7 +862,11 @@ html, body {
                 </div>
                 <div class="form-group form-full">
                   <label id="inv-expinc-acct-label">From account</label>
-                  <select id="inv-expinc-acct"></select>
+                  <button type="button" class="select-field placeholder" id="inv-expinc-acct-trigger" onclick="openInvExpIncAcctPicker()" style="width:100%">
+                    <span id="inv-expinc-acct-span" style="flex:1;text-align:left">Select account</span>
+                    <i class="ti ti-chevron-down"></i>
+                  </button>
+                  <input type="hidden" id="inv-expinc-acct">
                 </div>
               </div>
             </div>
@@ -862,7 +877,12 @@ html, body {
             </div>
             <div class="form-group">
               <label>Category</label>
-              <select id="inv-cat"></select>
+              <button type="button" class="select-field placeholder" id="inv-cat-trigger" onclick="openInvCatPicker()" style="width:100%">
+                <i class="ti" id="inv-cat-icon" style="display:none;font-size:14px;flex-shrink:0"></i>
+                <span id="inv-cat-label" style="flex:1;text-align:left">Select category</span>
+                <i class="ti ti-chevron-down"></i>
+              </button>
+              <input type="hidden" id="inv-cat">
             </div>
             <div class="form-group">
               <label>Date &amp; time</label>
@@ -893,9 +913,11 @@ html, body {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
       <i class="ti ti-filter" style="color:var(--accent)"></i>
       <span style="font-size:13px;font-weight:500;color:var(--text2)">Filter by year</span>
-      <select id="rpt-year-sel" onchange="onRptYearChange()" style="border:1px solid var(--border2);border-radius:var(--radius-xs);padding:4px 10px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;cursor:pointer">
-        <option value="all">All time</option>
-      </select>
+      <button type="button" class="select-field" id="rpt-year-trigger" onclick="openRptYearPicker()" style="width:auto;min-width:110px">
+        <span id="rpt-year-label" style="flex:1;text-align:left">All time</span>
+        <i class="ti ti-chevron-down"></i>
+      </button>
+      <input type="hidden" id="rpt-year-sel" value="all">
     </div>
 
     <!-- Cashflow -->
@@ -1188,15 +1210,12 @@ html, body {
     <div class="modal-title">Add holding</div>
     <div class="form-grid">
       <div class="form-group form-full"><label>Asset type</label>
-        <select id="h-type" onchange="onHoldingTypeChange(this.value)" required>
-          <option value="" disabled selected hidden>Select asset type</option>
-          <option value="bank">Bank account</option>
-          <option value="bond">Bond / Fixed income</option>
-          <option value="cash">Cash</option>
-          <option value="crypto">Crypto</option>
-          <option value="etf">ETF</option>
-          <option value="stock">Stock</option>
-        </select>
+        <button type="button" class="select-field placeholder" id="h-type-trigger" onclick="openHTypePicker()" style="width:100%">
+          <i class="ti" id="h-type-icon" style="display:none;font-size:14px;flex-shrink:0"></i>
+          <span id="h-type-label" style="flex:1;text-align:left">Select asset type</span>
+          <i class="ti ti-chevron-down"></i>
+        </button>
+        <input type="hidden" id="h-type" required>
       </div>
       <!-- Bank / Cash fields -->
       <div class="form-group form-full" id="h-name-wrap">
@@ -1468,10 +1487,19 @@ function openAddHoldingModal(presetType){
   if(presetType){
     typeSelect.value = presetType;
     onHoldingTypeChange(presetType);
+    const opt = H_TYPE_OPTIONS.find(o=>o.value===presetType);
+    document.getElementById('h-type-label').textContent = opt ? opt.label : 'Select asset type';
+    document.getElementById('h-type-trigger').classList.toggle('placeholder', !opt);
+    setTriggerIcon('h-type-icon', opt?.icon, opt?.color);
     typeSelect.disabled = true;
     if(typeWrap) typeWrap.style.display='none';
     if(titleEl) titleEl.textContent = `Add ${TYPE_LABELS[presetType]||presetType}`;
   } else {
+    typeSelect.value = 'bank';
+    const opt = H_TYPE_OPTIONS.find(o=>o.value==='bank');
+    document.getElementById('h-type-label').textContent = opt.label;
+    document.getElementById('h-type-trigger').classList.remove('placeholder');
+    setTriggerIcon('h-type-icon', opt.icon, opt.color);
     typeSelect.disabled = false;
     if(typeWrap) typeWrap.style.display='';
     if(titleEl) titleEl.textContent = 'Add holding';
@@ -1652,6 +1680,127 @@ function setTriggerIcon(iconId, icon, color){
   if(!el) return;
   if(icon){ el.className = 'ti ' + icon; el.style.color = color || 'var(--text3)'; el.style.display = ''; }
   else { el.style.display = 'none'; }
+}
+
+// ── Add Holding: asset type picker ──
+const H_TYPE_OPTIONS = [
+  {value:'bank',   label:'Bank account',        icon:'ti-building-bank',      color:'#0ea5e9'},
+  {value:'bond',   label:'Bond / Fixed income', icon:'ti-certificate',        color:'#ec4899'},
+  {value:'cash',   label:'Cash',                icon:'ti-cash',               color:'#84cc16'},
+  {value:'crypto', label:'Crypto',               icon:'ti-currency-bitcoin',  color:'#f59e0b'},
+  {value:'etf',    label:'ETF',                  icon:'ti-trending-up',       color:'#10b981'},
+  {value:'stock',  label:'Stock',                icon:'ti-chart-candle',      color:'#6366f1'},
+];
+function openHTypePicker(){
+  const current = document.getElementById('h-type').value;
+  openSelectPicker('Select asset type', H_TYPE_OPTIONS, current, (val)=>{
+    document.getElementById('h-type').value = val;
+    const opt = H_TYPE_OPTIONS.find(o=>o.value===val);
+    document.getElementById('h-type-label').textContent = opt ? opt.label : 'Select asset type';
+    document.getElementById('h-type-trigger').classList.toggle('placeholder', !opt);
+    setTriggerIcon('h-type-icon', opt?.icon, opt?.color);
+    onHoldingTypeChange(val);
+  });
+}
+
+// ── Recurring: frequency picker ──
+const CF_FREQ_OPTIONS = [
+  {value:'daily',   label:'Daily'},
+  {value:'weekly',  label:'Weekly'},
+  {value:'monthly', label:'Monthly'},
+  {value:'yearly',  label:'Yearly'},
+];
+function openCfFreqPicker(){
+  const current = document.getElementById('cf-freq').value || 'monthly';
+  openSelectPicker('Select frequency', CF_FREQ_OPTIONS, current, (val)=>{
+    document.getElementById('cf-freq').value = val;
+    const opt = CF_FREQ_OPTIONS.find(o=>o.value===val);
+    document.getElementById('cf-freq-label').textContent = opt ? opt.label : 'Monthly';
+  });
+}
+
+// ── Reports: year filter picker ──
+let rptYearOptionsCache = [{value:'all', label:'All time'}];
+function openRptYearPicker(){
+  const current = document.getElementById('rpt-year-sel').value;
+  openSelectPicker('Filter by year', rptYearOptionsCache, current, (val)=>{
+    document.getElementById('rpt-year-sel').value = val;
+    rptFilterYear = val;
+    document.getElementById('rpt-year-label').textContent = val==='all' ? 'All time' : val;
+    renderReports();
+  });
+}
+
+// ── Investment form pickers ──
+function invAssetOptionsList(){
+  const investHoldings = holdings.filter(h=>['stock','etf','crypto','bond'].includes(h.type));
+  const typeColorMap = {bond:'#ec4899',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  return investHoldings.map(h=>{
+    const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
+    return {value:h.id, label:`${n} (${h.ticker})`, icon:TYPE_ICONS[h.type], color:typeColorMap[h.type]};
+  });
+}
+function openInvAssetPicker(){
+  const current = document.getElementById('inv-asset').value;
+  const options = invAssetOptionsList();
+  openSelectPicker('Select asset', options, current, (val)=>{
+    document.getElementById('inv-asset').value = val;
+    const opt = options.find(o=>o.value===val);
+    document.getElementById('inv-asset-label').textContent = opt ? opt.label : 'Select asset';
+    document.getElementById('inv-asset-trigger').classList.toggle('placeholder', !opt);
+    updateInvCounterparts();
+  });
+}
+
+function invCounterpartOptionsList(){
+  const selectedId = document.getElementById('inv-asset').value;
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
+  return holdings.filter(h=>h.id!==selectedId).map(h=>{
+    const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
+    return {value:h.id, label:`${n} (${TYPE_LABELS[h.type]||h.type})`, icon:TYPE_ICONS[h.type], color:typeColorMap[h.type]};
+  });
+}
+function openInvPaidFromPicker(){
+  const current = document.getElementById('inv-paid-from').value;
+  const options = invCounterpartOptionsList();
+  openSelectPicker('Purchased with', options, current, (val)=>{
+    document.getElementById('inv-paid-from').value = val;
+    const opt = options.find(o=>o.value===val);
+    document.getElementById('inv-paid-from-label').textContent = opt ? opt.label : 'Select account';
+    document.getElementById('inv-paid-from-trigger').classList.toggle('placeholder', !opt);
+  });
+}
+function openInvSaleToPicker(){
+  const current = document.getElementById('inv-sale-to').value;
+  const options = invCounterpartOptionsList();
+  openSelectPicker('Proceeds credited to', options, current, (val)=>{
+    document.getElementById('inv-sale-to').value = val;
+    const opt = options.find(o=>o.value===val);
+    document.getElementById('inv-sale-to-label').textContent = opt ? opt.label : 'Select account';
+    document.getElementById('inv-sale-to-trigger').classList.toggle('placeholder', !opt);
+  });
+}
+function openInvExpIncAcctPicker(){
+  const current = document.getElementById('inv-expinc-acct').value;
+  const options = accountOptionsList();
+  const title = document.getElementById('inv-expinc-acct-label').textContent || 'Select account';
+  openSelectPicker(title, options, current, (val)=>{
+    document.getElementById('inv-expinc-acct').value = val;
+    const opt = options.find(o=>o.value===val);
+    document.getElementById('inv-expinc-acct-span').textContent = opt ? opt.label : 'Select account';
+    document.getElementById('inv-expinc-acct-trigger').classList.toggle('placeholder', !opt);
+  });
+}
+function openInvCatPicker(){
+  const current = document.getElementById('inv-cat').value;
+  const options = cfCategories.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color}));
+  openSelectPicker('Select category', options, current, (val)=>{
+    document.getElementById('inv-cat').value = val;
+    const cat = cfCategories.find(c=>c.id===val);
+    document.getElementById('inv-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('inv-cat-trigger').classList.toggle('placeholder', !cat);
+    setTriggerIcon('inv-cat-icon', cat?.icon, cat?.color);
+  });
 }
 
 // ── LOAD ──
@@ -3568,13 +3717,11 @@ function toggleRecurring(on){
 }
 
 function updateInvCounterparts(){
-  const selectedId=document.getElementById('inv-asset').value;
-  const opts=holdings.filter(h=>h.id!==selectedId).map(h=>{
-    const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
-    return `<option value="${h.id}">${n} (${TYPE_LABELS[h.type]||h.type})</option>`;
-  }).join('');
-  document.getElementById('inv-paid-from').innerHTML=opts;
-  document.getElementById('inv-sale-to').innerHTML=opts;
+  ['inv-paid-from','inv-sale-to'].forEach(id=>{ document.getElementById(id).value = ''; });
+  document.getElementById('inv-paid-from-label').textContent = 'Select account';
+  document.getElementById('inv-paid-from-trigger').classList.add('placeholder');
+  document.getElementById('inv-sale-to-label').textContent = 'Select account';
+  document.getElementById('inv-sale-to-trigger').classList.add('placeholder');
 }
 
 function calcPurchaseFromUnit(){
@@ -3666,19 +3813,29 @@ function populateCfForm(tx=null){
     setTriggerIcon('cf-to-icon', toOpt?.icon, toOpt?.color);
   }
 
-  // Investment asset dropdown
-  const investHoldings=holdings.filter(h=>['stock','etf','crypto','bond'].includes(h.type));
-  document.getElementById('inv-asset').innerHTML='<option value="" disabled selected hidden>Select asset</option>'+investHoldings.map(h=>{
-    const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
-    return `<option value="${h.id}">${n} (${h.ticker})</option>`;
-  }).join('');
-  document.getElementById('inv-asset').onchange=updateInvCounterparts;
-  if(tx?.holding_id && ['purchase','sale'].includes(tx?.type)) document.getElementById('inv-asset').value = tx.holding_id;
-  updateInvCounterparts();
+  // Investment asset trigger
+  {
+    const investOpts = invAssetOptionsList();
+    let assetId = '';
+    if(tx?.holding_id && ['purchase','sale'].includes(tx?.type)) assetId = tx.holding_id;
+    document.getElementById('inv-asset').value = assetId;
+    const assetOpt = investOpts.find(o=>o.value===assetId);
+    document.getElementById('inv-asset-label').textContent = assetOpt ? assetOpt.label : 'Select asset';
+    document.getElementById('inv-asset-trigger').classList.toggle('placeholder', !assetOpt);
+    updateInvCounterparts();
+  }
 
-  document.getElementById('inv-cat').innerHTML=catSel.innerHTML;
+  // Investment category trigger
+  {
+    const catId = tx?.category_id || '';
+    document.getElementById('inv-cat').value = catId;
+    const cat = cfCategories.find(c=>c.id===catId);
+    document.getElementById('inv-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('inv-cat-trigger').classList.toggle('placeholder', !cat);
+    setTriggerIcon('inv-cat-icon', cat?.icon, cat?.color);
+  }
+
   document.getElementById('inv-date').value=iso;
-  document.getElementById('inv-sale-date').value=iso;
   if(document.getElementById('inv-pnl-preview')) document.getElementById('inv-pnl-preview').style.display='none';
 
   // Set context/type — use tx values in edit mode, globals otherwise
@@ -3751,7 +3908,7 @@ async function saveInvTransaction(){
   const h=holdings.find(x=>x.id===assetId);
   if(!h){await showAlert('Please select an asset.');return;}
   const desc=document.getElementById('inv-cat').value;
-  const dateIso=new Date(document.getElementById('inv-date').value||document.getElementById('inv-sale-date').value).toISOString();
+  const dateIso=new Date(document.getElementById('inv-date').value).toISOString();
   if(cfIType==='purchase'){
     const qty=parseFloat(document.getElementById('inv-qty').value)||0;
     const price=parseFloat(document.getElementById('inv-price').value)||0;
@@ -4581,13 +4738,13 @@ function mkStat(label, val, cls=''){
 let rptFilterYear = String(new Date().getFullYear());
 
 function populateRptYearSel(){
-  const sel = document.getElementById('rpt-year-sel'); if(!sel) return;
+  const trigger = document.getElementById('rpt-year-trigger'); if(!trigger) return;
   const years = [...new Set(cfTransactions.map(t=>new Date(t.date).getFullYear()))].sort((a,b)=>b-a);
   // Ensure current year default is valid (fall back to 'all' if no transactions this year)
   if(years.length && rptFilterYear !== 'all' && !years.includes(Number(rptFilterYear))) rptFilterYear = 'all';
-  sel.innerHTML = '<option value="all">All years</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join('');
-  sel.value = rptFilterYear;
-
+  rptYearOptionsCache = [{value:'all', label:'All time'}, ...years.map(y=>({value:String(y), label:String(y)}))];
+  document.getElementById('rpt-year-sel').value = rptFilterYear;
+  document.getElementById('rpt-year-label').textContent = rptFilterYear==='all' ? 'All time' : String(rptFilterYear);
 }
 
 function onRptYearChange(){
