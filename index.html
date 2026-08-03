@@ -1229,6 +1229,15 @@ html, body {
         <label id="h-name-label">Account name</label>
         <input type="text" id="h-name" placeholder="e.g. Intesa Sanpaolo">
       </div>
+      <!-- Dividend fields: pick an existing stock instead of typing a name -->
+      <div class="form-group form-full" id="h-div-stock-wrap" style="display:none">
+        <label>Stock</label>
+        <button type="button" class="select-field placeholder" id="h-div-stock-trigger" onclick="openHDivStockPicker()" style="width:100%">
+          <span id="h-div-stock-label" style="flex:1;text-align:left">Select stock</span>
+          <i class="ti ti-chevron-down"></i>
+        </button>
+        <input type="hidden" id="h-div-stock">
+      </div>
       <!-- Investment fields -->
       <div class="form-group form-full" id="h-ticker-wrap" style="display:none">
         <label>Search asset</label>
@@ -2047,15 +2056,37 @@ let hCostMode = 'unit'; // 'unit' = average cost per unit, 'total' = total amoun
 
 function onHoldingTypeChange(type){
   const isSimple = type==='bank' || type==='cash' || type==='dividend';
-  document.getElementById('h-name-wrap').style.display  = isSimple ? '' : 'none';
+  document.getElementById('h-name-wrap').style.display  = (type==='bank'||type==='cash') ? '' : 'none';
+  document.getElementById('h-div-stock-wrap').style.display = type==='dividend' ? '' : 'none';
   document.getElementById('h-ticker-wrap').style.display = isSimple ? 'none' : '';
   document.getElementById('h-qty-wrap').style.display    = isSimple ? 'none' : '';
   document.getElementById('h-name-label').textContent    = type==='bank' ? 'Account name' : 'Label';
   document.getElementById('h-name').placeholder          = type==='bank' ? 'e.g. Intesa Sanpaolo' : type==='dividend' ? 'e.g. AAPL Dividends' : 'e.g. Wallet cash';
+  if(type==='dividend'){
+    document.getElementById('h-div-stock').value = '';
+    document.getElementById('h-div-stock-label').textContent = 'Select stock';
+    document.getElementById('h-div-stock-trigger').classList.add('placeholder');
+  }
   hCostMode = 'unit';
   document.getElementById('h-cost-mode-toggle').style.display = isSimple ? 'none' : '';
   updateCostModeUI();
   clearTickerSelection();
+}
+
+function openHDivStockPicker(){
+  const current = document.getElementById('h-div-stock').value;
+  const stockHoldings = holdings.filter(h=>h.type==='stock');
+  const options = stockHoldings.map(h=>({value:h.id, label:h.name||h.ticker, icon:'ti-chart-candle', color:'#6366f1'}));
+  if(!options.length){
+    showAlert("You don't have any stock holdings yet — add one first, then you can log dividends for it.");
+    return;
+  }
+  openSelectPicker('Select stock', options, current, (val)=>{
+    document.getElementById('h-div-stock').value = val;
+    const opt = options.find(o=>o.value===val);
+    document.getElementById('h-div-stock-label').textContent = opt ? opt.label : 'Select stock';
+    document.getElementById('h-div-stock-trigger').classList.toggle('placeholder', !opt);
+  });
 }
 
 function toggleCostMode(){
@@ -2069,6 +2100,12 @@ function updateCostModeUI(){
   const hint   = document.getElementById('h-cost-hint');
   const type   = document.getElementById('h-type').value;
   const isSimple = type==='bank' || type==='cash' || type==='dividend';
+  if(type==='dividend'){
+    label.textContent  = 'Dividend amount received (€)';
+    hint.textContent   = "Each time you add a dividend for this stock, it's added to that stock's running total.";
+    hint.style.display = '';
+    return;
+  }
   if(isSimple){
     label.textContent  = 'Current balance (€)';
     hint.style.display = 'none';
@@ -2245,6 +2282,26 @@ async function saveHolding(){
   const costInput=parseFloat(document.getElementById('h-cost').value)||0;
 
   if(isSimple){
+    if(type==='dividend'){
+      const stockId = document.getElementById('h-div-stock').value;
+      if(!stockId){ await showAlert('Please select a stock.'); return; }
+      const stock = holdings.find(h=>h.id===stockId);
+      if(!stock){ await showAlert('Selected stock not found — please pick it again.'); return; }
+      if(costInput<=0){ await showAlert('Please enter the dividend amount received.'); return; }
+      const stockName = stock.name || stock.ticker;
+      const name   = `${stockName} - Dividends`;
+      const ticker = `${stock.ticker}_DIV`.toUpperCase();
+      const existing = holdings.find(h=>h.ticker===ticker && h.type==='dividend');
+      if(existing){
+        // Accumulate: each dividend logged adds to the running total for this stock, never overwrites it.
+        const newBalance = (existing.avg_cost||0) + costInput;
+        await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance, name})});
+      } else {
+        await api('holdings',{method:'POST',body:JSON.stringify({ticker, name, type, qty:1, avg_cost:costInput})});
+      }
+      closeModal('modal-holding'); await loadAll(); toast('Dividend recorded ✓'); refreshPrices(true, true);
+      return;
+    }
     const name=document.getElementById('h-name').value.trim();
     if(!name){ await showAlert('Please enter an account name.'); return; }
     if(costInput<=0){ await showAlert('Please enter the current balance.'); return; }
