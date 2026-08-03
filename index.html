@@ -713,7 +713,8 @@ html, body {
             <div class="form-group" id="cf-cat-wrap">
               <label>Category</label>
               <button type="button" class="select-field placeholder" id="cf-cat-trigger" onclick="openCfCategoryPicker()" style="width:100%">
-                <span id="cf-cat-label">Select category</span>
+                <i class="ti" id="cf-cat-icon" style="display:none;font-size:14px;flex-shrink:0"></i>
+                <span id="cf-cat-label" style="flex:1;text-align:left">Select category</span>
                 <i class="ti ti-chevron-down"></i>
               </button>
               <input type="hidden" id="cf-cat">
@@ -729,7 +730,8 @@ html, body {
             <div class="form-group form-full" id="cf-from-wrap">
               <label id="cf-from-label">From account</label>
               <button type="button" class="select-field placeholder" id="cf-from-trigger" onclick="openCfAccountPicker('from')" style="width:100%">
-                <span id="cf-from-label-text">Select account</span>
+                <i class="ti" id="cf-from-icon" style="display:none;font-size:14px;flex-shrink:0"></i>
+                <span id="cf-from-label-text" style="flex:1;text-align:left">Select account</span>
                 <i class="ti ti-chevron-down"></i>
               </button>
               <input type="hidden" id="cf-from">
@@ -737,7 +739,8 @@ html, body {
             <div class="form-group form-full" id="cf-to-wrap" style="display:none">
               <label>To account</label>
               <button type="button" class="select-field placeholder" id="cf-to-trigger" onclick="openCfAccountPicker('to')" style="width:100%">
-                <span id="cf-to-label-text">Select account</span>
+                <i class="ti" id="cf-to-icon" style="display:none;font-size:14px;flex-shrink:0"></i>
+                <span id="cf-to-label-text" style="flex:1;text-align:left">Select account</span>
                 <i class="ti ti-chevron-down"></i>
               </button>
               <input type="hidden" id="cf-to">
@@ -1589,14 +1592,15 @@ function dpToday(){
 // ── Custom themed list picker (replaces native <select> for category/account) ──
 let selectModalOnChoose = null;
 function openSelectPicker(title, options, currentValue, onChoose){
-  // options: [{value, label}]
+  // options: [{value, label, icon?, color?}]
   selectModalOnChoose = onChoose;
   document.getElementById('select-modal-title').textContent = title;
   document.getElementById('select-modal-list').innerHTML = options.map(o=>{
     const isActive = String(o.value)===String(currentValue);
+    const iconHtml = o.icon ? `<i class="ti ${o.icon}" style="font-size:15px;color:${o.color||'var(--text2)'};width:20px;text-align:center;flex-shrink:0"></i>` : '';
     return `<div class="select-modal-row${isActive?' active':''}" onclick="chooseSelectOption(this)" data-value="${String(o.value).replace(/"/g,'&quot;')}">
-      <span>${o.label}</span>
-      ${isActive?'<i class="ti ti-check"></i>':''}
+      <span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">${iconHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.label}</span></span>
+      ${isActive?'<i class="ti ti-check" style="flex-shrink:0"></i>':''}
     </div>`;
   }).join('');
   openModal('modal-select');
@@ -1608,20 +1612,22 @@ function chooseSelectOption(el){
 }
 
 function accountOptionsList(){
+  const typeColorMap = {bank:'#0ea5e9',bond:'#ec4899',cash:'#84cc16',crypto:'#f59e0b',etf:'#10b981',stock:'#6366f1'};
   return holdings.map(h=>{
     const n=h.type==='crypto'?cleanCryptoName(h.name||h.ticker):(h.name||h.ticker);
-    return {value:h.id, label:`${n} (${TYPE_LABELS[h.type]||h.type})`};
+    return {value:h.id, label:`${n} (${TYPE_LABELS[h.type]||h.type})`, icon:TYPE_ICONS[h.type], color:typeColorMap[h.type]};
   });
 }
 
 function openCfCategoryPicker(){
   const current = document.getElementById('cf-cat').value;
-  const options = cfCategories.map(c=>({value:c.id, label:c.name}));
+  const options = cfCategories.map(c=>({value:c.id, label:c.name, icon:c.icon, color:c.color}));
   openSelectPicker('Select category', options, current, (val)=>{
     document.getElementById('cf-cat').value = val;
     const cat = cfCategories.find(c=>c.id===val);
     document.getElementById('cf-cat-label').textContent = cat ? cat.name : 'Select category';
     document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
+    setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
   });
 }
 
@@ -1629,6 +1635,7 @@ function openCfAccountPicker(which){
   const fieldId   = which==='from' ? 'cf-from' : 'cf-to';
   const labelId   = which==='from' ? 'cf-from-label-text' : 'cf-to-label-text';
   const triggerId = which==='from' ? 'cf-from-trigger' : 'cf-to-trigger';
+  const iconId    = which==='from' ? 'cf-from-icon' : 'cf-to-icon';
   const current = document.getElementById(fieldId).value;
   const options = accountOptionsList();
   openSelectPicker('Select account', options, current, (val)=>{
@@ -1636,7 +1643,15 @@ function openCfAccountPicker(which){
     const opt = options.find(o=>o.value===val);
     document.getElementById(labelId).textContent = opt ? opt.label : 'Select account';
     document.getElementById(triggerId).classList.toggle('placeholder', !opt);
+    setTriggerIcon(iconId, opt?.icon, opt?.color);
   });
+}
+
+function setTriggerIcon(iconId, icon, color){
+  const el = document.getElementById(iconId);
+  if(!el) return;
+  if(icon){ el.className = 'ti ' + icon; el.style.color = color || 'var(--text3)'; el.style.display = ''; }
+  else { el.style.display = 'none'; }
 }
 
 // ── LOAD ──
@@ -3631,6 +3646,7 @@ function populateCfForm(tx=null){
     const cat = cfCategories.find(c=>c.id===catId);
     document.getElementById('cf-cat-label').textContent = cat ? cat.name : 'Select category';
     document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
+    setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
   }
 
   // Account triggers
@@ -3644,8 +3660,10 @@ function populateCfForm(tx=null){
     const toOpt   = opts.find(o=>o.value===toId);
     document.getElementById('cf-from-label-text').textContent = fromOpt ? fromOpt.label : 'Select account';
     document.getElementById('cf-from-trigger').classList.toggle('placeholder', !fromOpt);
+    setTriggerIcon('cf-from-icon', fromOpt?.icon, fromOpt?.color);
     document.getElementById('cf-to-label-text').textContent = toOpt ? toOpt.label : 'Select account';
     document.getElementById('cf-to-trigger').classList.toggle('placeholder', !toOpt);
+    setTriggerIcon('cf-to-icon', toOpt?.icon, toOpt?.color);
   }
 
   // Investment asset dropdown
