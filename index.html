@@ -1226,6 +1226,25 @@ html, body {
   </div>
 </div>
 
+<!-- CATEGORY DETAIL (floating window showing a category's sub-categories) -->
+<div class="overlay" id="modal-cat-detail">
+  <div class="modal" style="max-width:420px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+      <div id="catdetail-icon" class="cat-icon" style="background:rgba(99,102,241,0.15);color:#6366f1"><i class="ti ti-tag"></i></div>
+      <div style="flex:1;min-width:0">
+        <div id="catdetail-name" style="font-size:16px;font-weight:700">Category</div>
+        <div id="catdetail-count" style="font-size:12px;color:var(--text2)">0 sub-categories</div>
+      </div>
+      <button class="btn btn-sm" onclick="closeModal('modal-cat-detail');openCatModal(catDetailId)" title="Edit category"><i class="ti ti-pencil"></i></button>
+    </div>
+    <div id="catdetail-sublist" style="max-height:45vh;overflow-y:auto;margin-bottom:1rem"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn" onclick="closeModal('modal-cat-detail')">Close</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-cat-detail');openCatModal(null,catDetailId)"><i class="ti ti-plus"></i> Add subcategory</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD HOLDING MODAL -->
 <div class="overlay" id="modal-holding">
   <div class="modal">
@@ -3814,7 +3833,13 @@ function updateInvCounterparts(){
 function calcPurchaseFromUnit(){
   const qty=parseFloat(document.getElementById('inv-qty').value)||0;
   const price=parseFloat(document.getElementById('inv-price').value)||0;
-  if(qty&&price) document.getElementById('inv-total').value=(qty*price).toFixed(2);
+  const total=parseFloat(document.getElementById('inv-total').value)||0;
+  if(qty&&price){
+    document.getElementById('inv-total').value=(qty*price).toFixed(2);
+  } else if(qty&&total){
+    // Total was already filled in before quantity/price — derive price now that quantity is known
+    document.getElementById('inv-price').value=(total/qty).toFixed(4);
+  }
 }
 function calcPurchaseFromTotal(){
   const qty=parseFloat(document.getElementById('inv-qty').value)||0;
@@ -3824,7 +3849,12 @@ function calcPurchaseFromTotal(){
 function calcSaleFromUnit(){
   const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
   const price=parseFloat(document.getElementById('inv-sale-price').value)||0;
-  if(qty&&price){ document.getElementById('inv-sale-total').value=(qty*price).toFixed(2); updatePnl(); }
+  const total=parseFloat(document.getElementById('inv-sale-total').value)||0;
+  if(qty&&price){
+    document.getElementById('inv-sale-total').value=(qty*price).toFixed(2); updatePnl();
+  } else if(qty&&total){
+    document.getElementById('inv-sale-price').value=(total/qty).toFixed(4); updatePnl();
+  }
 }
 function calcSaleFromTotal(){
   const qty=parseFloat(document.getElementById('inv-sale-qty').value)||0;
@@ -4240,20 +4270,13 @@ function renderSettings(){
   if(catEl){
     const topCats = cfCategories.filter(c=>!c.parent_id);
     catEl.innerHTML = topCats.length ? topCats.map(c=>{
-      const subs = cfCategories.filter(s=>s.parent_id===c.id);
-      const subRows = subs.map(s=>`<div class="settings-cat-row" style="padding-left:34px">
-          <i class="ti ti-corner-down-right" style="color:var(--text3);font-size:14px;width:16px;text-align:center;flex-shrink:0"></i>
-          <span style="flex:1;font-size:13px;color:var(--text2)">${s.name}</span>
-          <button class="btn btn-sm" onclick="openCatModal('${s.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteCat('${s.id}')"><i class="ti ti-trash"></i></button>
-        </div>`).join('');
-      return `<div class="settings-cat-row">
+      const subCount = cfCategories.filter(s=>s.parent_id===c.id).length;
+      return `<div class="settings-cat-row" style="cursor:pointer" onclick="openCatDetailModal('${c.id}')">
           <i class="ti ${c.icon}" style="color:${c.color};font-size:18px;width:24px;text-align:center"></i>
-          <span style="flex:1;font-size:13px">${c.name}</span>
-          <button class="btn btn-sm" onclick="openCatModal(null,'${c.id}')" style="margin-right:4px" title="Add sub-category"><i class="ti ti-corner-down-right"></i></button>
-          <button class="btn btn-sm" onclick="openCatModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteCat('${c.id}')"><i class="ti ti-trash"></i></button>
-        </div>${subRows}`;
+          <span style="flex:1;font-size:13px">${c.name}${subCount?` <span style="color:var(--text3);font-size:11px">(${subCount})</span>`:''}</span>
+          <button class="btn btn-sm" onclick="event.stopPropagation();openCatModal('${c.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCat('${c.id}')"><i class="ti ti-trash"></i></button>
+        </div>`;
     }).join('') : '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No categories yet</div>';
   }
 
@@ -4329,9 +4352,41 @@ function updateIconPreview(icon){
   if(hexEl) hexEl.textContent=color;
 }
 
+let catDetailId = null;
+function openCatDetailModal(id){
+  catDetailId = id;
+  const cat = cfCategories.find(c=>c.id===id);
+  if(!cat) return;
+  document.getElementById('catdetail-icon').innerHTML = `<i class="ti ${cat.icon}"></i>`;
+  document.getElementById('catdetail-icon').style.background = cat.color+'26';
+  document.getElementById('catdetail-icon').style.color = cat.color;
+  document.getElementById('catdetail-name').textContent = cat.name;
+  const subs = cfCategories.filter(c=>c.parent_id===id).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('catdetail-count').textContent = `${subs.length} sub-categor${subs.length===1?'y':'ies'}`;
+  document.getElementById('catdetail-sublist').innerHTML = subs.length ? subs.map(s=>`
+    <div class="settings-cat-row">
+      <i class="ti ${cat.icon}" style="color:${cat.color};font-size:16px;width:22px;text-align:center"></i>
+      <span style="flex:1;font-size:13px">${s.name}</span>
+      <button class="btn btn-sm" onclick="closeModal('modal-cat-detail');openCatModal('${s.id}')" style="margin-right:4px"><i class="ti ti-pencil"></i></button>
+      <button class="btn btn-sm btn-danger" onclick="deleteCatFromDetail('${s.id}')"><i class="ti ti-trash"></i></button>
+    </div>`).join('') : '<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No sub-categories yet</div>';
+  openModal('modal-cat-detail');
+}
+
+async function deleteCatFromDetail(id){
+  await deleteCat(id);
+  // Keep the detail window open and refreshed, unless the parent itself no longer exists
+  if(cfCategories.find(c=>c.id===catDetailId)) openCatDetailModal(catDetailId);
+  else closeModal('modal-cat-detail');
+}
+
 function openCatModal(id=null, presetParentId=null){
   document.getElementById('cat-edit-id').value=id||'';
-  document.getElementById('cat-modal-title').textContent=id?'Edit category':'Add category';
+  const editingCat = id ? cfCategories.find(c=>c.id===id) : null;
+  const isSubContext = presetParentId || (editingCat && editingCat.parent_id);
+  document.getElementById('cat-modal-title').textContent = id
+    ? (isSubContext ? 'Edit subcategory' : 'Edit category')
+    : (isSubContext ? 'Add subcategory' : 'Add category');
   if(!id){
     document.getElementById('cat-name').value='';
     document.getElementById('cat-icon').value='ti-tag';
