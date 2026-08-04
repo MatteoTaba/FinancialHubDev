@@ -2091,13 +2091,13 @@ function renderCategoryDetail(type){
       <button class="btn btn-primary" onclick="openAddHoldingModal('${type}')"><i class="ti ti-plus"></i> Add ${TYPE_LABELS[type]||type}</button>
       <button class="btn" onclick="refreshPrices(true)"><i class="ti ti-refresh"></i> Refresh prices</button>
     </div>
-    <div class="cat-body open" style="border-radius:var(--radius)">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">
-        <div>${items.length} holding${items.length>1?'s':''}</div>
-        <div style="text-align:right">
-          <span>${catPct}% of portfolio</span>${!isSimple && catHasPrices ? `<span style="margin-left:10px;font-weight:600;color:${catGain>=0?'var(--green)':'var(--red)'}">${fmt(catGain)} (${fmtPct(catGainPct)})</span>` : ''}
-        </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--surface2);border:1px solid rgba(38,45,61,0.5);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;font-size:12px;color:var(--text2)">
+      <div>${items.length} holding${items.length>1?'s':''}</div>
+      <div style="text-align:right">
+        <span>${catPct}% of portfolio</span>${!isSimple && catHasPrices ? `<span style="margin-left:10px;font-weight:600;color:${catGain>=0?'var(--green)':'var(--red)'}">${fmt(catGain)} (${fmtPct(catGainPct)})</span>` : ''}
       </div>
+    </div>
+    <div class="cat-body open">
       <table><thead>${thead}</thead><tbody>${rows}${totalRow}</tbody></table>
     </div>`;
 }
