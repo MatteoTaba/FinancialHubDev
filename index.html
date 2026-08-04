@@ -2907,7 +2907,7 @@ function buildSalaryPeriods(){
 }
 
 function isIncomeTx(t){ return t.type==='income'||t.type==='sale'; }
-function isOutcomeTx(t){ return t.type==='expense'||t.type==='purchase'; }
+function isOutcomeTx(t){ return t.type==='expense'; }
 
 // Year filter state for monthly chart
 let insightsYear = null; // null = all years
