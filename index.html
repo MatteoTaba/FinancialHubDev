@@ -1557,6 +1557,12 @@ function openAddHoldingModal(presetType){
 }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
+document.getElementById('modal-select')?.addEventListener('click', e=>{
+  if(e.target.id==='modal-select'){
+    const listEl = document.getElementById('select-modal-list');
+    if(listEl) listEl.scrollTop = 0;
+  }
+});
 
 // ── Custom themed date-picker (replaces native <input type=date>) ──
 const dpState = { field:null, onChange:null, viewYear:null, viewMonth:null, value:'', withTime:false }; // value is ISO 'YYYY-MM-DD' or ''
@@ -1691,6 +1697,8 @@ function chooseSelectOption(el){
   const value = el.dataset.value;
   if(typeof selectModalOnChoose==='function') selectModalOnChoose(value);
   closeModal('modal-select');
+  const listEl = document.getElementById('select-modal-list');
+  if(listEl) listEl.scrollTop = 0;
 }
 
 function accountOptionsList(){
