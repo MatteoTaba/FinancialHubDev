@@ -211,8 +211,8 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
 .select-modal-row.active{color:var(--accent);font-weight:600}
 .date-arrow{color:var(--text3);font-size:12px;flex-shrink:0}
 @media(max-width:768px){
-  .date-field{flex:1 1 0;width:auto;padding:6px 8px;font-size:12px}
-  .date-field span{font-size:12px}
+  .date-filter-row .date-field{flex:1 1 0;width:auto;padding:6px 8px;font-size:12px}
+  .date-filter-row .date-field span{font-size:12px}
 }
 
 /* Custom calendar popup */
@@ -3956,6 +3956,26 @@ function populateCfForm(tx=null){
   document.getElementById('inv-date').value=iso;
   if(document.getElementById('inv-pnl-preview')) document.getElementById('inv-pnl-preview').style.display='none';
 
+  // Purchase fields — reset qty/price/total and the "paid with" account trigger
+  {
+    document.getElementById('inv-qty').value   = '';
+    document.getElementById('inv-price').value = '';
+    document.getElementById('inv-total').value = '';
+    document.getElementById('inv-paid-from').value = '';
+    document.getElementById('inv-paid-from-label').textContent = 'Select account';
+    document.getElementById('inv-paid-from-trigger').classList.add('placeholder');
+  }
+
+  // Sale fields — reset qty/price/total and the "proceeds to" account trigger
+  {
+    document.getElementById('inv-sale-qty').value   = '';
+    document.getElementById('inv-sale-price').value = '';
+    document.getElementById('inv-sale-total').value = '';
+    document.getElementById('inv-sale-to').value = '';
+    document.getElementById('inv-sale-to-label').textContent = 'Select account';
+    document.getElementById('inv-sale-to-trigger').classList.add('placeholder');
+  }
+
   // Set context/type — use tx values in edit mode, globals otherwise
   const ctx  = tx ? (['purchase','sale'].includes(tx.type) ? 'investment' : 'account') : cfCtx;
   const type = tx?.type || cfType;
@@ -4010,7 +4030,11 @@ Proceed anyway?`)) return;
   if(isRecur){
     const freq=document.getElementById('cf-freq').value;
     const start=document.getElementById('cf-recur-start').value;
-    const recur=await api('recurrences',{method:'POST',body:JSON.stringify({type:cfType,amount,description:desc||null,category_id:cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:cfType==='transfer'?toId:null,frequency:freq,next_due:new Date(start).toISOString(),active:true})});
+    // The transaction we're about to create below already covers the "start" occurrence,
+    // so next_due must be advanced past it — otherwise processRecurrences() sees this same
+    // date as overdue on the next load and creates a duplicate transaction for it.
+    const nextDue=advanceDue(new Date(start), freq);
+    const recur=await api('recurrences',{method:'POST',body:JSON.stringify({type:cfType,amount,description:desc||null,category_id:cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:cfType==='transfer'?toId:null,frequency:freq,next_due:nextDue.toISOString(),active:true})});
     if(Array.isArray(recur)&&recur[0]) txData.recurring_id=recur[0].id;
   }
   await api('cashflow_transactions',{method:'POST',body:JSON.stringify(txData)});
@@ -5274,6 +5298,7 @@ async function restoreSnapshot(id, date){
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
+          'X-App-Secret': APP_SECRET,
           'Prefer': 'return=minimal'
         }
       });
@@ -5287,7 +5312,7 @@ async function restoreSnapshot(id, date){
     const deleteAllSnapshots = async () => {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/net_worth_snapshots?snapshot_date=not.is.null`, {
         method: 'DELETE',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Prefer': 'return=minimal' }
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'X-App-Secret': APP_SECRET, 'Prefer': 'return=minimal' }
       });
       if(!r.ok){ const txt=await r.text(); throw new Error(`Delete net_worth_snapshots failed: ${txt}`); }
     };
@@ -5309,7 +5334,13 @@ async function restoreSnapshot(id, date){
     showSnapshotStatus('<span class="spin" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px"></span> Restoring data…', 'info');
     const insertOrder = [
       {table:'cashflow_categories',  data: snap.data.cashflow_categories   || []},
-      {table:'holdings',             data: snap.data.holdings               || []},
+      {table:'holdings',             data: (snap.data.holdings || []).map(h=>{
+        // Older snapshots may carry fields removed from the schema since they were taken
+        // (e.g. dividends_received, folded into its own category type). Strip anything
+        // the current table wouldn't recognize rather than let the whole restore fail.
+        const {dividends_received, ...rest} = h;
+        return rest;
+      })},
       {table:'recurrences',          data: snap.data.recurrences            || []},
       {table:'cashflow_transactions',data: snap.data.cashflow_transactions  || []},
       {table:'net_worth_snapshots',  data: snap.data.net_worth_snapshots    || []},
@@ -5325,6 +5356,7 @@ async function restoreSnapshot(id, date){
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
+            'X-App-Secret': APP_SECRET,
             'Content-Type': 'application/json',
             'Prefer': 'return=minimal'
           },
