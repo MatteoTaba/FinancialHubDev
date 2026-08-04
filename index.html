@@ -1220,7 +1220,7 @@ html, body {
       <div id="cat-icon-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;max-height:180px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:6px"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-cat')">Cancel</button>
+      <button class="btn" onclick="catCreateTargetField=null;closeModal('modal-cat')">Cancel</button>
       <button class="btn btn-primary" onclick="saveCat()">Save</button>
     </div>
   </div>
@@ -1683,6 +1683,8 @@ function openSelectPicker(title, options, currentValue, onChoose){
       ${isActive?'<i class="ti ti-check" style="flex-shrink:0"></i>':''}
     </div>`;
   }).join('');
+  const listEl = document.getElementById('select-modal-list');
+  listEl.scrollTop = 0;
   openModal('modal-select');
 }
 function chooseSelectOption(el){
@@ -1716,13 +1718,31 @@ function getTopCategoryId(categoryId){
   return cat.parent_id || cat.id;
 }
 
+let catCreateTargetField = null; // tracks which trigger (cf-cat / inv-cat) to auto-select into after creating a category inline
+
+function catDisplayLabel(cat){
+  if(!cat) return '';
+  if(cat.parent_id){
+    const parent = cfCategories.find(c=>c.id===cat.parent_id);
+    return parent ? `${parent.name} > ${cat.name}` : cat.name;
+  }
+  return cat.name;
+}
+
 function openCfCategoryPicker(){
   const current = document.getElementById('cf-cat').value;
   const options = buildCategoryPickerOptions();
+  options.push({value:'__new_cat__', label:'New category…', icon:'ti-plus', color:'var(--accent)'});
   openSelectPicker('Select category', options, current, (val)=>{
+    if(val==='__new_cat__'){
+      catCreateTargetField = 'cf-cat';
+      closeModal('modal-select');
+      openCatModal();
+      return;
+    }
     document.getElementById('cf-cat').value = val;
     const cat = cfCategories.find(c=>c.id===val);
-    document.getElementById('cf-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('cf-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
   });
@@ -1864,10 +1884,17 @@ function openInvExpIncAcctPicker(){
 function openInvCatPicker(){
   const current = document.getElementById('inv-cat').value;
   const options = buildCategoryPickerOptions();
+  options.push({value:'__new_cat__', label:'New category…', icon:'ti-plus', color:'var(--accent)'});
   openSelectPicker('Select category', options, current, (val)=>{
+    if(val==='__new_cat__'){
+      catCreateTargetField = 'inv-cat';
+      closeModal('modal-select');
+      openCatModal();
+      return;
+    }
     document.getElementById('inv-cat').value = val;
     const cat = cfCategories.find(c=>c.id===val);
-    document.getElementById('inv-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('inv-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('inv-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('inv-cat-icon', cat?.icon, cat?.color);
   });
@@ -3764,11 +3791,13 @@ function showCfForm(){
   cfForm.style.display='';
   document.getElementById('cf-fab').style.display='none';
   populateCfForm();
-  // Mobile: swipe down anywhere on form to close
+  // Mobile: swipe down to close, but only when already scrolled to the top —
+  // otherwise this fires while the user is just trying to scroll up within the form.
   if(window.innerWidth<=768){
-    let _sy=0;
-    cfForm._onTS=(e)=>{ _sy=e.touches[0].clientY; };
-    cfForm._onTE=(e)=>{ if(e.changedTouches[0].clientY-_sy>70) showCfMain(); };
+    let _sy=0, _startedAtTop=true;
+    const _scrollEl = () => document.scrollingElement || document.documentElement;
+    cfForm._onTS=(e)=>{ _sy=e.touches[0].clientY; _startedAtTop = _scrollEl().scrollTop<=5; };
+    cfForm._onTE=(e)=>{ if(_startedAtTop && e.changedTouches[0].clientY-_sy>70) showCfMain(); };
     cfForm.removeEventListener('touchstart',cfForm._onTS);
     cfForm.removeEventListener('touchend',cfForm._onTE);
     cfForm.addEventListener('touchstart',cfForm._onTS,{passive:true});
@@ -3909,7 +3938,7 @@ function populateCfForm(tx=null){
     const catId = tx?.category_id || '';
     document.getElementById('cf-cat').value = catId;
     const cat = cfCategories.find(c=>c.id===catId);
-    document.getElementById('cf-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('cf-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('cf-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('cf-cat-icon', cat?.icon, cat?.color);
   }
@@ -3948,7 +3977,7 @@ function populateCfForm(tx=null){
     const catId = tx?.category_id || '';
     document.getElementById('inv-cat').value = catId;
     const cat = cfCategories.find(c=>c.id===catId);
-    document.getElementById('inv-cat-label').textContent = cat ? cat.name : 'Select category';
+    document.getElementById('inv-cat-label').textContent = cat ? catDisplayLabel(cat) : 'Select category';
     document.getElementById('inv-cat-trigger').classList.toggle('placeholder', !cat);
     setTriggerIcon('inv-cat-icon', cat?.icon, cat?.color);
   }
@@ -4096,6 +4125,12 @@ let editTxId = null;
 
 function editCfTx(txId){
   const t = cfTransactions.find(x=>x.id===txId); if(!t) return;
+
+  if(t.type==='purchase' || t.type==='sale'){
+    showAlert(`Editing a ${t.type} isn't supported — changing quantity or price would need to recalculate your average cost history, which can't be done safely from here. Delete this transaction and re-add it with the correct details instead.`);
+    return;
+  }
+
   editTxId = txId;
 
   // Open the form
@@ -4473,14 +4508,28 @@ async function saveCat(){
   // Duplicate name check — scoped to siblings (same parent), case-insensitive, excluding current if editing
   const duplicate = cfCategories.find(c=>c.name.toLowerCase()===name.toLowerCase()&&c.id!==editId&&(c.parent_id||null)===parentId);
   if(duplicate){await showAlert(`A category named "${duplicate.name}" already exists ${parentId?'under this parent':'at the top level'}. Please choose a different name.`);return;}
+  let newCatId=null;
   if(editId){
     await api(`cashflow_categories?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({name,icon,color,parent_id:parentId})});
   } else {
-    await api('cashflow_categories',{method:'POST',body:JSON.stringify({name,icon,color,parent_id:parentId})});
+    const created=await api('cashflow_categories',{method:'POST',body:JSON.stringify({name,icon,color,parent_id:parentId})});
+    if(Array.isArray(created)&&created[0]) newCatId=created[0].id;
   }
   cfCategories=await api('cashflow_categories?order=name.asc');
   closeModal('modal-cat'); renderSettings();
   toast(editId?'Category updated ✓':'Category saved ✓');
+
+  // If this category was created from the Add Transaction category picker, select it right away
+  if(newCatId && catCreateTargetField){
+    const field = catCreateTargetField;
+    catCreateTargetField = null;
+    const cat = cfCategories.find(c=>c.id===newCatId);
+    const labelId = field+'-label', triggerId = field+'-trigger', iconId = field+'-icon';
+    document.getElementById(field).value = newCatId;
+    document.getElementById(labelId).textContent = catDisplayLabel(cat);
+    document.getElementById(triggerId).classList.remove('placeholder');
+    setTriggerIcon(iconId, cat?.icon, cat?.color);
+  }
 }
 
 async function deleteCat(id){
