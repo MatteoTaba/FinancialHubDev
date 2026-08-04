@@ -1690,8 +1690,8 @@ function openSelectPicker(title, options, currentValue, onChoose){
     </div>`;
   }).join('');
   const listEl = document.getElementById('select-modal-list');
-  listEl.scrollTop = 0;
   openModal('modal-select');
+  listEl.scrollTop = 0;
 }
 function chooseSelectOption(el){
   const value = el.dataset.value;
