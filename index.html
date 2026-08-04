@@ -3121,9 +3121,9 @@ function renderYearlyCharts(){
           const val=ds.data[bi]; if(!val) return;
           ctx.fillStyle='rgba(255,255,255,0.9)';
           ctx.font=`bold 10px 'DM Sans',sans-serif`;
-          ctx.textAlign='right';
+          ctx.textAlign=val>=0?'right':'left';
           ctx.textBaseline='middle';
-          ctx.fillText(fmtShort(val),bar.x-12,bar.y);
+          ctx.fillText(fmtShort(val),bar.x+(val>=0?-12:12),bar.y);
         });
       });
       ctx.restore();
@@ -3185,9 +3185,9 @@ function renderSavingsChart(){
           const val=ds.data[bi]; if(!val) return;
           ctx.fillStyle='rgba(255,255,255,0.9)';
           ctx.font=`bold 10px 'DM Sans',sans-serif`;
-          ctx.textAlign='right';
+          ctx.textAlign=val>=0?'right':'left';
           ctx.textBaseline='middle';
-          ctx.fillText((val>=0?'+':'')+fmtShort(val),bar.x-12,bar.y);
+          ctx.fillText((val>=0?'+':'')+fmtShort(val),bar.x+(val>=0?-12:12),bar.y);
         });
       });
       ctx.restore();
