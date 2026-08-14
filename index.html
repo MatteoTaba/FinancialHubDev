@@ -5288,8 +5288,7 @@ function renderOutcomesReport(){
     if(!total) return null;
     const byCat = {};
     cats.forEach(c=>{ byCat[c.id]=pTxs.filter(t=>getTopCategoryId(t.category_id)===c.id).reduce((s,t)=>s+t.amount,0); });
-    const fixed = pTxs.filter(t=>t.recurring_id).reduce((s,t)=>s+t.amount,0);
-    return {period:p.label, byCat, total, fixed};
+    return {period:p.label, byCat, total};
   }).filter(Boolean);
 
   const grandTotal = rows.reduce((s,r)=>s+r.total,0);
@@ -5305,16 +5304,14 @@ function renderOutcomesReport(){
     (biggestCat ? mkStat('Biggest category', biggestCat.name) : '');
 
   const catHeaders = cats.map(c=>`<th>${c.name}</th>`).join('');
-  const thead = `<thead><tr><th>Period</th><th>🔁 Fixed</th>${catHeaders}<th>Total</th></tr></thead>`;
-  const totalFixed = rows.reduce((s,r)=>s+(r.fixed||0),0);
+  const thead = `<thead><tr><th>Period</th>${catHeaders}<th>Total</th></tr></thead>`;
   const tbody = rows.map(r=>`<tr>
     <td>${r.period}</td>
-    <td style="color:var(--accent)">${r.fixed>0?rptFmt(r.fixed):'—'}</td>
     ${cats.map(c=>`<td>${r.byCat[c.id]>0?rptFmt(r.byCat[c.id]):'—'}</td>`).join('')}
     <td style="color:var(--red);font-weight:600">${rptFmt(r.total)}</td>
   </tr>`).join('');
   const catTotalCells = cats.map(c=>`<td>${catTotals[c.id]>0?rptFmt(catTotals[c.id]):'—'}</td>`).join('');
-  const tfoot = `<tfoot><tr class="total-row"><td>TOTAL</td><td style="color:var(--accent)">${rptFmt(totalFixed)}</td>${catTotalCells}<td>${rptFmt(grandTotal)}</td></tr></tfoot>`;
+  const tfoot = `<tfoot><tr class="total-row"><td>TOTAL</td>${catTotalCells}<td>${rptFmt(grandTotal)}</td></tr></tfoot>`;
   document.getElementById('rpt-out-table').innerHTML = thead+`<tbody>${tbody}</tbody>`+tfoot;
 }
 
