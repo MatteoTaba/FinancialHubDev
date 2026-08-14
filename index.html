@@ -3971,7 +3971,7 @@ function populateCfForm(tx=null){
   // Dates
   document.getElementById('cf-date').value = tx ? new Date(tx.date).toISOString().slice(0,16) : iso;
   updateCfDateLabel();
-  document.getElementById('cf-recur-start').value=iso;
+  document.getElementById('cf-recur-start').value = tx ? new Date(tx.date).toISOString().slice(0,16) : iso;
   document.getElementById('cf-recurring').checked=false;
   document.getElementById('cf-recurring-opts').style.display='none';
 
@@ -4077,14 +4077,26 @@ async function saveCfTransaction(){
     if(oldTx) await reverseBalanceChange(oldTx.type, Number(oldTx.amount), oldTx.holding_id, oldTx.holding_to_id);
     await applyBalanceChange(cfType, amount, fromId, cfType==='transfer'?toId:null);
 
-    await api(`cashflow_transactions?id=eq.${editTxId}`,{method:'PATCH',body:JSON.stringify({
+    const patchData = {
       type:cfType, amount, description:desc||null, category_id:cfType==='transfer'?null:catId,
       holding_id:fromId, holding_to_id:cfType==='transfer'?toId:null,
       date:new Date(date).toISOString()
-    })});
+    };
+
+    // Turn this into the first occurrence of a new recurring series, if requested and it isn't one already
+    const isRecur = !oldTx?.recurring_id && document.getElementById('cf-recurring').checked;
+    if(isRecur){
+      const freq=document.getElementById('cf-freq').value;
+      const start=document.getElementById('cf-recur-start').value;
+      const nextDue=advanceDue(new Date(start), freq);
+      const recur=await api('recurrences',{method:'POST',body:JSON.stringify({type:cfType,amount,description:desc||null,category_id:cfType==='transfer'?null:catId,holding_id:fromId,holding_to_id:cfType==='transfer'?toId:null,frequency:freq,next_due:nextDue.toISOString(),active:true})});
+      if(Array.isArray(recur)&&recur[0]) patchData.recurring_id=recur[0].id;
+    }
+
+    await api(`cashflow_transactions?id=eq.${editTxId}`,{method:'PATCH',body:JSON.stringify(patchData)});
     editTxId=null;
-    [cfTransactions,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('holdings?order=created_at.asc')]);
-    renderCashflow(); renderOverview(); showCfMain(); toast('Transaction updated ✓');
+    [cfTransactions,cfRecurrences,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
+    renderCashflow(); renderSettings(); renderOverview(); showCfMain(); toast('Transaction updated ✓');
     // Restore form title and recurring option
     const recurWrap=document.querySelector('[id="cf-recurring"]')?.closest('.form-group');
     if(recurWrap) recurWrap.style.display='';
@@ -4203,9 +4215,15 @@ function editCfTx(txId){
   const titleEl = document.getElementById('cf-form-title');
   if(titleEl) titleEl.textContent = 'Edit Transaction';
 
-  // Hide recurring section when editing
+  // Recurring: only offer "make recurring" if this isn't already part of a series
   const recurWrap = document.getElementById('cf-recurring')?.closest('.form-group');
-  if(recurWrap) recurWrap.style.display = 'none';
+  if(t.recurring_id){
+    if(recurWrap) recurWrap.style.display = 'none';
+  } else {
+    if(recurWrap) recurWrap.style.display = '';
+    document.getElementById('cf-recurring').checked = false;
+    document.getElementById('cf-recurring-opts').style.display = 'none';
+  }
 
   // Note for recurring transactions
   document.getElementById('edit-recur-note')?.remove();
@@ -4590,29 +4608,31 @@ async function saveCat(){
 }
 
 async function deleteCat(id){
-  const usedCount = cfTransactions.filter(t=>t.category_id===id).length;
-  const recurCount = cfRecurrences.filter(r=>r.category_id===id).length;
-  const subCount = cfCategories.filter(c=>c.parent_id===id).length;
-  if(subCount>0||usedCount>0||recurCount>0){
+  const subCats = cfCategories.filter(c=>c.parent_id===id);
+  const subIds = subCats.map(c=>c.id);
+  const allIds = [id, ...subIds];
+  const usedCount = cfTransactions.filter(t=>allIds.includes(t.category_id)).length;
+  const recurCount = cfRecurrences.filter(r=>allIds.includes(r.category_id)).length;
+  if(subCats.length>0||usedCount>0||recurCount>0){
     const parts=[];
     if(usedCount>0) parts.push(`${usedCount} transaction${usedCount!==1?'s':''}`);
     if(recurCount>0) parts.push(`${recurCount} recurrence${recurCount!==1?'s':''}`);
-    let msg = parts.length ? `This category is used in ${parts.join(' and ')}. Deleting it will remove the category from those.` : '';
-    if(subCount>0) msg += `${msg?'\n\n':''}It has ${subCount} sub-categor${subCount!==1?'ies':'y'}, which will become top-level categories instead of being deleted.`;
+    let msg = parts.length ? `This category${subCats.length>0?' (and its sub-categories)':''} is used in ${parts.join(' and ')}. Deleting it will remove the category from those.` : '';
+    if(subCats.length>0) msg += `${msg?'\n\n':''}It has ${subCats.length} sub-categor${subCats.length!==1?'ies':'y'}, which will be deleted too.`;
     if(!await showConfirm(`${msg}\n\nProceed?`)) return;
   } else {
     if(!await showConfirm('Delete this category?')) return;
   }
-  // Sub-categories become top-level rather than being deleted along with their parent
-  if(subCount>0){
-    await api(`cashflow_categories?parent_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({parent_id:null})});
-  }
-  // Uncategorize all linked transactions and recurrences first
+  // Uncategorize all linked transactions and recurrences first (parent + sub-categories)
   if(usedCount>0){
-    await api(`cashflow_transactions?category_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({category_id:null})});
+    await api(`cashflow_transactions?category_id=in.(${allIds.join(',')})`,{method:'PATCH',body:JSON.stringify({category_id:null})});
   }
   if(recurCount>0){
-    await api(`recurrences?category_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({category_id:null})});
+    await api(`recurrences?category_id=in.(${allIds.join(',')})`,{method:'PATCH',body:JSON.stringify({category_id:null})});
+  }
+  // Delete sub-categories along with the parent
+  if(subIds.length>0){
+    await api(`cashflow_categories?id=in.(${subIds.join(',')})`,{method:'DELETE'});
   }
   await api(`cashflow_categories?id=eq.${id}`,{method:'DELETE'});
   // Reload everything so UI reflects changes
