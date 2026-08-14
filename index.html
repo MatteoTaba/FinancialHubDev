@@ -1439,6 +1439,24 @@ function showAlert(msg, title=''){
 function showConfirm(msg, title='', danger=false){
   return showDialog(msg,{title, confirmText:'OK', cancelText:'Cancel', danger});
 }
+function showChoiceDialog(title, message, choices){
+  // choices: [{label, value, primary?}] — resolves with the chosen value, or null if dismissed
+  return new Promise(resolve=>{
+    document.getElementById('dialog-title').textContent = title;
+    document.getElementById('dialog-title').style.display = '';
+    document.getElementById('dialog-message').innerHTML = `<div style="font-size:13px;color:var(--text2)">${message}</div>`;
+    const footer = document.getElementById('dialog-footer');
+    footer.innerHTML = '';
+    choices.forEach(c=>{
+      const btn = document.createElement('button');
+      btn.className = 'btn' + (c.primary ? ' btn-primary' : '');
+      btn.textContent = c.label;
+      btn.onclick = ()=>{ closeModal('modal-dialog'); resolve(c.value); };
+      footer.appendChild(btn);
+    });
+    openModal('modal-dialog');
+  });
+}
 function fmtPct(n){ return (n>=0?'+':'')+Number(n).toFixed(2)+'%'; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
@@ -4071,9 +4089,27 @@ async function saveCfTransaction(){
     if(amount<=0){await showAlert('Please enter an amount.');return;}
     if(cfType==='transfer'&&fromId===toId){await showAlert('Source and destination account must be different.');return;}
 
+    const oldTx = cfTransactions.find(t=>t.id===editTxId);
+
+    // If the category changed on a recurring transaction, ask whether to apply it to just
+    // this occurrence or to the whole series (past occurrences + future ones going forward).
+    let applyCatToSeries = false;
+    if(oldTx?.recurring_id && cfType!=='transfer' && catId !== (oldTx.category_id||null)){
+      const choice = await showChoiceDialog(
+        'Recurring transaction',
+        'This is part of a recurring series. Apply the category change to just this occurrence, or to the whole series?',
+        [
+          {label:'Cancel', value:'cancel'},
+          {label:'Only this one', value:'one'},
+          {label:'Whole series', value:'all', primary:true},
+        ]
+      );
+      if(!choice || choice==='cancel') return;
+      applyCatToSeries = choice==='all';
+    }
+
     // Undo what the original transaction did to its holding(s) before applying the edit —
     // otherwise the old amount stays baked into the balance forever.
-    const oldTx = cfTransactions.find(t=>t.id===editTxId);
     if(oldTx) await reverseBalanceChange(oldTx.type, Number(oldTx.amount), oldTx.holding_id, oldTx.holding_to_id);
     await applyBalanceChange(cfType, amount, fromId, cfType==='transfer'?toId:null);
 
@@ -4094,6 +4130,14 @@ async function saveCfTransaction(){
     }
 
     await api(`cashflow_transactions?id=eq.${editTxId}`,{method:'PATCH',body:JSON.stringify(patchData)});
+
+    // Propagate the category change to the rest of the series if that was chosen —
+    // both past occurrences and the recurrence rule itself, so future ones match too.
+    if(applyCatToSeries && oldTx.recurring_id){
+      await api(`cashflow_transactions?recurring_id=eq.${oldTx.recurring_id}`,{method:'PATCH',body:JSON.stringify({category_id:catId})});
+      await api(`recurrences?id=eq.${oldTx.recurring_id}`,{method:'PATCH',body:JSON.stringify({category_id:catId})});
+    }
+
     editTxId=null;
     [cfTransactions,cfRecurrences,holdings]=await Promise.all([api('cashflow_transactions?order=date.desc'),api('recurrences?order=next_due.asc'),api('holdings?order=created_at.asc')]);
     renderCashflow(); renderSettings(); renderOverview(); showCfMain(); toast('Transaction updated ✓');
