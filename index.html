@@ -2811,7 +2811,7 @@ function renderTrendChart(){
       const up=diff>=0;
       const label=periodLabels[activePeriod]||'vs period start';
       changeEl.className='ov-hero-change'+(up?'':' neg');
-      changeEl.innerHTML=(up?'<i class="ti ti-trending-up"></i>':'<i class="ti ti-trending-down"></i>')+fmt(Math.abs(diff))+' ('+fmtPct(Math.abs(pct))+') '+label;
+      changeEl.innerHTML=(up?'<i class="ti ti-trending-up"></i>':'<i class="ti ti-trending-down"></i>')+fmt(diff)+' ('+fmtPct(pct)+') '+label;
     } else {
       changeEl.className='ov-hero-change';
       changeEl.innerHTML='<i class="ti ti-minus"></i> No history yet';
