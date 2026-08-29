@@ -766,8 +766,11 @@ html, body {
                 </div>
                 <div class="form-group">
                   <label>First occurrence</label>
-                  <input type="text" id="cf-recur-start" placeholder="dd/mm/yyyy hh:mm" oninput="parseDateInput(this,'cf-recur-start-parsed')">
-                  <input type="hidden" id="cf-recur-start-parsed">
+                  <button type="button" class="date-field" id="cf-recur-start-trigger" onclick="openRecurStartPicker()" style="width:100%">
+                    <i class="ti ti-calendar"></i>
+                    <span id="cf-recur-start-label">dd/mm/yyyy hh:mm</span>
+                  </button>
+                  <input type="hidden" id="cf-recur-start">
                 </div>
               </div>
             </div>
@@ -1933,7 +1936,8 @@ async function loadAll(deferRender=false){
     api('transactions?order=created_at.desc'),
     api('net_worth_snapshots?order=snapshot_date.asc')
   ]);
-  await maybeTakeSnapshot();
+  // Note: maybeTakeSnapshot() is called AFTER refreshPrices() in the boot sequence,
+  // so the snapshot always records the live net worth, not the stale cost-basis.
   if(!deferRender){ refreshHoldingsViews(); renderTx(); renderOverview(); }
   document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
 }
@@ -3975,6 +3979,17 @@ function openCfDatePicker(){
     updateCfDateLabel();
   }, {withTime:true});
 }
+function openRecurStartPicker(){
+  openDatePicker('cf-recur-start', document.getElementById('cf-recur-start').value, v=>{
+    document.getElementById('cf-recur-start').value = v;
+    updateRecurStartLabel();
+  }, {withTime:true});
+}
+function updateRecurStartLabel(){
+  const el = document.getElementById('cf-recur-start-label');
+  const v  = document.getElementById('cf-recur-start').value;
+  if(el) el.textContent = v ? fmtDateTimeDDMMYYYY(v) : 'dd/mm/yyyy hh:mm';
+}
 function updateCfDateLabel(){
   const el = document.getElementById('cf-date-label');
   const v  = document.getElementById('cf-date').value;
@@ -3990,6 +4005,7 @@ function populateCfForm(tx=null){
   document.getElementById('cf-date').value = tx ? new Date(tx.date).toISOString().slice(0,16) : iso;
   updateCfDateLabel();
   document.getElementById('cf-recur-start').value = tx ? new Date(tx.date).toISOString().slice(0,16) : iso;
+  updateRecurStartLabel();
   document.getElementById('cf-recurring').checked=false;
   document.getElementById('cf-recurring-opts').style.display='none';
 
@@ -5569,6 +5585,7 @@ if('scrollRestoration' in history) history.scrollRestoration='manual';
 (async ()=>{
   await loadAll(true);        // fetch data, don't render yet
   await refreshPrices(true, true); // fetch fresh prices silently
+  await maybeTakeSnapshot();  // snapshot NOW — prices are live, net worth is correct
   refreshHoldingsViews(); renderTx(); renderOverview(); // single render, once prices are ready — avoids the net-worth flicker
   loadCashflow();
 })();
