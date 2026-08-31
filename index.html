@@ -4490,7 +4490,8 @@ function renderSettings(){
             <div style="font-size:11px;color:var(--text2);margin-top:2px">${fmt(r.amount)} · <span style="text-transform:capitalize">${r.frequency}</span> · ${hName} · Next: ${due}${cat?` · <span style="color:${color}">${cat.name}</span>`:''}${!r.active?' · <span style="color:var(--text3)">Paused</span>':''}</div>
           </div>
           <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')"><i class="ti ti-trash"></i></button>
+          <button class="btn btn-sm" onclick="stopRecurSeries('${r.id}')" title="Stop — keep past transactions, cancel future ones"><i class="ti ti-player-stop"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')" title="Delete recurrence rule"><i class="ti ti-trash"></i></button>
         </div>`;
       }).join('')
     :'<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No recurring transactions set up</div>';
@@ -4710,11 +4711,45 @@ async function toggleRecurActive(id,active){
   renderSettings(); toast(active?'Recurrence resumed':'Recurrence paused');
 }
 
-async function deleteRecur(id){
-  if(!await showConfirm('Delete this recurrence?')) return;
+// Stop: cancel future occurrences but keep all past transactions.
+// Also unlinks past transactions from the rule so they lose the recurring badge.
+async function stopRecurSeries(id){
+  if(!await showConfirm('Stop this recurring series?\n\nFuture occurrences will no longer be created. Past transactions will be kept but unlinked from the series.')) return;
+  // Unlink past transactions (they keep their data, just lose the recurring_id tag)
+  await api(`cashflow_transactions?recurring_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({recurring_id:null})});
+  // Delete the rule itself
   await api(`recurrences?id=eq.${id}`,{method:'DELETE'});
   cfRecurrences=await api('recurrences?order=next_due.asc');
-  renderSettings(); toast('Recurrence removed');
+  cfTransactions=await api('cashflow_transactions?order=date.desc');
+  renderSettings(); renderCashflow(); toast('Recurring series stopped');
+}
+
+async function deleteRecur(id){
+  const choice = await showChoiceDialog(
+    'Delete recurrence',
+    'What should happen to past transactions already created by this series?',
+    [
+      {label:'Cancel', value:'cancel'},
+      {label:'Keep past transactions', value:'keep'},
+      {label:'Delete all', value:'all', primary:true},
+    ]
+  );
+  if(!choice || choice==='cancel') return;
+  if(choice==='all'){
+    // Delete all past transactions in the series, then the rule
+    const txIds = cfTransactions.filter(t=>t.recurring_id===id).map(t=>t.id);
+    for(const txId of txIds){
+      const t = cfTransactions.find(x=>x.id===txId);
+      if(t) await api(`cashflow_transactions?id=eq.${txId}`,{method:'DELETE'});
+    }
+  } else {
+    // Just unlink past transactions, keep their data
+    await api(`cashflow_transactions?recurring_id=eq.${id}`,{method:'PATCH',body:JSON.stringify({recurring_id:null})});
+  }
+  await api(`recurrences?id=eq.${id}`,{method:'DELETE'});
+  cfRecurrences=await api('recurrences?order=next_due.asc');
+  cfTransactions=await api('cashflow_transactions?order=date.desc');
+  renderSettings(); renderCashflow(); toast('Recurrence removed');
 }
 
 // ─────────────────────────────────────────
