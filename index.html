@@ -989,8 +989,6 @@ html, body {
 
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
-    <!-- Hidden recurrences list (still needed for logic) -->
-    <div id="settings-recurrences" style="display:none"></div>
 
     <!-- ── Settings main menu ── -->
     <div id="settings-main">
@@ -1038,6 +1036,10 @@ html, body {
           </div>
         </div>
         <div id="recur-calendar"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:1rem">Active series</div>
+        <div id="settings-recurrences"></div>
       </div>
     </div>
 
@@ -4316,7 +4318,7 @@ function showSettingsMain(){
 function showSettingsSection(section){
   document.getElementById('settings-main').style.display='none';
   ['calendar','categories','backup'].forEach(s=>document.getElementById('settings-'+s).style.display=s===section?'':'none');
-  if(section==='calendar'){ renderRecurCalendar(); }
+  if(section==='calendar'){ renderRecurCalendar(); renderSettings(); }
   if(section==='categories'){ renderSettings(); }
   if(section==='backup'){ loadSnapshots(); }
 }
