@@ -4486,14 +4486,28 @@ function renderSettings(){
         const due=new Date(r.next_due).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Rome'});
         const color=cat?.color||'var(--accent)';
         return `<div class="settings-recur-row">
-          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:18px;flex-shrink:0;margin-top:2px"></i>
+          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:20px;flex-shrink:0;margin-top:3px"></i>
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:500">${r.description||'—'}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">${fmt(r.amount)} · <span style="text-transform:capitalize">${r.frequency}</span> · ${hName} · Next: ${due}${cat?` · <span style="color:${color}">${cat.name}</span>`:''}${!r.active?' · <span style="color:var(--text3)">Paused</span>':''}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600">${r.description||'—'}</span>
+              <span style="font-size:14px;font-weight:700;color:var(--accent)">${fmt(r.amount)}</span>
+              ${!r.active?`<span style="font-size:10px;background:var(--surface3);color:var(--text3);border-radius:4px;padding:1px 6px">Paused</span>`:''}
+            </div>
+            <div style="font-size:11px;color:var(--text2);display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px">
+              <span style="text-transform:capitalize;font-weight:500">${r.frequency}</span>
+              <span style="color:var(--border2)">·</span>
+              <span>${hName}</span>
+              ${cat?`<span style="color:var(--border2)">·</span><span style="color:${color};font-weight:500">${cat.name}</span>`:''}
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">
+              <i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong>
+            </div>
           </div>
-          <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
-          <button class="btn btn-sm" onclick="stopRecurSeries('${r.id}')" title="Stop — keep past transactions, cancel future ones"><i class="ti ti-player-stop"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')" title="Delete recurrence rule"><i class="ti ti-trash"></i></button>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
+            <button class="btn btn-sm" onclick="stopRecurSeries('${r.id}')" title="Stop series"><i class="ti ti-player-stop"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')" title="Delete"><i class="ti ti-trash"></i></button>
+          </div>
         </div>`;
       }).join('')
     :'<div style="color:var(--text3);font-size:13px;padding:0.5rem 0">No recurring transactions set up</div>';
