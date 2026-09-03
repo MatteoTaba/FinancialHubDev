@@ -4503,7 +4503,7 @@ function renderSettings(){
               <i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <div style="display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start">
             <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
             <button class="btn btn-sm" onclick="stopRecurSeries('${r.id}')" title="Stop series"><i class="ti ti-player-stop"></i></button>
             <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')" title="Delete"><i class="ti ti-trash"></i></button>
