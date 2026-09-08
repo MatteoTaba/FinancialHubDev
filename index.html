@@ -406,6 +406,8 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
 .settings-cat-row:last-child{border-bottom:none}
 .settings-recur-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .settings-recur-row:last-child{border-bottom:none}
+.recur-btn-group{display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start}
+@media(max-width:768px){.recur-btn-group{flex-direction:column}}
 /* ── Cashflow ── */
 /* Mobile */
 /* ── BOTTOM TAB BAR ── */
@@ -892,8 +894,11 @@ html, body {
             </div>
             <div class="form-group">
               <label>Date &amp; time</label>
-              <input type="text" id="inv-date" placeholder="dd/mm/yyyy hh:mm" oninput="parseDateInput(this)">
-              <span style="font-size:11px;color:var(--text3)" id="inv-date-preview"></span>
+              <button type="button" class="date-field" id="inv-date-trigger" onclick="openInvDatePicker()" style="width:100%">
+                <i class="ti ti-calendar"></i>
+                <span id="inv-date-label">dd/mm/yyyy hh:mm</span>
+              </button>
+              <input type="hidden" id="inv-date">
             </div>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1.5rem">
@@ -3992,6 +3997,17 @@ function updateRecurStartLabel(){
   const v  = document.getElementById('cf-recur-start').value;
   if(el) el.textContent = v ? fmtDateTimeDDMMYYYY(v) : 'dd/mm/yyyy hh:mm';
 }
+function openInvDatePicker(){
+  openDatePicker('inv-date', document.getElementById('inv-date').value, v=>{
+    document.getElementById('inv-date').value = v;
+    updateInvDateLabel();
+  }, {withTime:true});
+}
+function updateInvDateLabel(){
+  const el = document.getElementById('inv-date-label');
+  const v  = document.getElementById('inv-date').value;
+  if(el) el.textContent = v ? fmtDateTimeDDMMYYYY(v) : 'dd/mm/yyyy hh:mm';
+}
 function updateCfDateLabel(){
   const el = document.getElementById('cf-date-label');
   const v  = document.getElementById('cf-date').value;
@@ -4065,6 +4081,7 @@ function populateCfForm(tx=null){
   }
 
   document.getElementById('inv-date').value=iso;
+  updateInvDateLabel();
   if(document.getElementById('inv-pnl-preview')) document.getElementById('inv-pnl-preview').style.display='none';
 
   // Purchase fields — reset qty/price/total and the "paid with" account trigger
@@ -4486,22 +4503,14 @@ function renderSettings(){
         const due=new Date(r.next_due).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Rome'});
         const color=cat?.color||'var(--accent)';
         return `<div class="settings-recur-row">
-          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:20px;flex-shrink:0;margin-top:3px"></i>
+          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:20px;flex-shrink:0;margin-top:2px"></i>
           <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600">${r.description||'—'}</span>
-              <span style="font-size:14px;font-weight:700;color:var(--accent)">${fmt(r.amount)}</span>
-              ${!r.active?`<span style="font-size:10px;background:var(--surface3);color:var(--text3);border-radius:4px;padding:1px 6px">Paused</span>`:''}
-            </div>
-            <div style="font-size:11px;color:var(--text2);display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px">
-              <span style="text-transform:capitalize;font-weight:500">${r.frequency}</span>
-              <span style="color:var(--border2)">·</span>
-              <span>${hName}</span>
-              ${cat?`<span style="color:var(--border2)">·</span><span style="color:${color};font-weight:500">${cat.name}</span>`:''}
-            </div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px">
-              <i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong>
-            </div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">${r.description||'—'}${!r.active?` <span style="font-size:10px;background:var(--surface3);color:var(--text3);border-radius:4px;padding:1px 6px;vertical-align:middle">Paused</span>`:''}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:2px">${fmt(r.amount)}</div>
+            <div style="font-size:11px;color:var(--text2);text-transform:capitalize;margin-bottom:1px">${r.frequency}</div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:1px">${hName}</div>
+            ${cat?`<div style="font-size:11px;color:${color};font-weight:500;margin-bottom:2px">${cat.name}</div>`:''}
+            <div style="font-size:11px;color:var(--text3)"><i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong></div>
           </div>
           <div style="display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start">
             <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
