@@ -406,8 +406,13 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
 .settings-cat-row:last-child{border-bottom:none}
 .settings-recur-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .settings-recur-row:last-child{border-bottom:none}
-.recur-btn-group{display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start}
-@media(max-width:768px){.recur-btn-group{flex-direction:column}}
+@media(min-width:769px){
+  .settings-recur-row{align-items:center}
+  .settings-recur-row .recur-info{display:flex;flex-direction:row;align-items:center;gap:6px 16px;flex-wrap:nowrap}
+  .settings-recur-row .recur-info>div{margin:0;white-space:nowrap}
+  .settings-recur-row .recur-title{font-size:13px;flex-shrink:0;min-width:100px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+  .settings-recur-row .recur-next{margin-left:auto!important}
+}
 /* ── Cashflow ── */
 /* Mobile */
 /* ── BOTTOM TAB BAR ── */
@@ -4503,16 +4508,16 @@ function renderSettings(){
         const due=new Date(r.next_due).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Rome'});
         const color=cat?.color||'var(--accent)';
         return `<div class="settings-recur-row">
-          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:20px;flex-shrink:0;margin-top:2px"></i>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;margin-bottom:2px">${r.description||'—'}${!r.active?` <span style="font-size:10px;background:var(--surface3);color:var(--text3);border-radius:4px;padding:1px 6px;vertical-align:middle">Paused</span>`:''}</div>
-            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:2px">${fmt(r.amount)}</div>
-            <div style="font-size:11px;color:var(--text2);text-transform:capitalize;margin-bottom:1px">${r.frequency}</div>
-            <div style="font-size:11px;color:var(--text2);margin-bottom:1px">${hName}</div>
-            ${cat?`<div style="font-size:11px;color:${color};font-weight:500;margin-bottom:2px">${cat.name}</div>`:''}
-            <div style="font-size:11px;color:var(--text3)"><i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong></div>
+          <i class="ti ${cat?.icon||'ti-repeat'}" style="color:${color};font-size:20px;flex-shrink:0"></i>
+          <div class="recur-info" style="flex:1;min-width:0">
+            <div class="recur-title" style="font-size:13px;font-weight:600">${r.description||'—'}${!r.active?` <span style="font-size:10px;background:var(--surface3);color:var(--text3);border-radius:4px;padding:1px 6px;vertical-align:middle">Paused</span>`:''}</div>
+            <div class="recur-amount" style="font-size:12px;font-weight:700;color:var(--accent)">${fmt(r.amount)}</div>
+            <div class="recur-period" style="font-size:11px;color:var(--text2);text-transform:capitalize">${r.frequency}</div>
+            <div class="recur-account" style="font-size:11px;color:var(--text2)">${hName}</div>
+            <div class="recur-cat" style="font-size:11px;color:${cat?color:'var(--text3)'};font-weight:${cat?'500':'400'}">${cat?cat.name:'—'}</div>
+            <div class="recur-next" style="font-size:11px;color:var(--text3)"><i class="ti ti-calendar-event" style="font-size:10px;margin-right:3px"></i>Next: <strong style="color:var(--text2)">${due}</strong></div>
           </div>
-          <div style="display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start">
+          <div style="display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:center">
             <button class="btn btn-sm" onclick="toggleRecurActive('${r.id}',${!r.active})" title="${r.active?'Pause':'Resume'}"><i class="ti ti-${r.active?'player-pause':'player-play'}"></i></button>
             <button class="btn btn-sm" onclick="stopRecurSeries('${r.id}')" title="Stop series"><i class="ti ti-player-stop"></i></button>
             <button class="btn btn-sm btn-danger" onclick="deleteRecur('${r.id}')" title="Delete"><i class="ti ti-trash"></i></button>
