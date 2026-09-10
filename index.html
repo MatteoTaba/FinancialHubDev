@@ -10,7 +10,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Financial Hub">
 <title>Financial Hub</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js">
+if(APP_ENV==='dev'){
+  const envBadge=document.getElementById('env-badge');
+  if(envBadge) envBadge.style.display='inline-block';
+  document.title = 'Financial Hub · DEV';
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -57,7 +63,6 @@ body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 .topbar-left{display:flex;align-items:center;gap:20px}
 .topbar-logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:var(--text);letter-spacing:-0.4px;font-family:'Outfit',sans-serif}
 .topbar-logo svg{box-shadow:0 0 0 1px rgba(16,212,176,0.1),0 0 12px -2px rgba(16,212,176,0.12)}
-#env-badge{font-size:10px;font-weight:700;letter-spacing:0.06em;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:5px;padding:2px 7px;font-family:'JetBrains Mono',monospace}
 
 .topbar-right{display:flex;align-items:center;gap:8px}
 #live-price-indicator{display:none}
@@ -418,6 +423,9 @@ select option{background:#141927;color:#f2f4f0;padding:8px}
   .settings-recur-row .recur-title{font-size:13px;flex-shrink:0;min-width:100px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
   .settings-recur-row .recur-next{margin-left:auto!important}
 }
+@media(min-width:769px){.settings-recur-row{align-items:center}}
+.recur-btn-group{display:flex;flex-direction:row;gap:4px;flex-shrink:0;align-items:flex-start}
+@media(max-width:768px){.recur-btn-group{flex-direction:column}}
 /* ── Cashflow ── */
 /* Mobile */
 /* ── BOTTOM TAB BAR ── */
@@ -559,7 +567,6 @@ html, body {
         <circle cx="26" cy="13" r="2" fill="rgba(0,0,0,0.7)"/>
       </svg>
       <span>Financial Hub</span>
-      <span id="env-badge" style="display:none">DEV</span>
     </div>
     <div style="padding-left:20px;border-left:1px solid rgba(255,255,255,0.08);font-size:12px;color:var(--text3);letter-spacing:0.01em;font-style:italic">Know your money</div>
   </div>
@@ -1400,15 +1407,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
 
 // Dev price proxy (Deno Deploy — see dev-proxy-main.ts). Independent of prod's Cloudflare Worker.
-// Paste your Deno Deploy URL here after deploying, WITHOUT a trailing slash, e.g.
-//   const DEV_PROXY = 'https://financialhub-dev.deno.dev';
 // Leave as '' to fall back to allOrigins (works, but takes several seconds per request).
 const DEV_PROXY = 'https://vague-platypus-1668.matteotaba.deno.net';
-if(APP_ENV==='dev'){
-  const envBadge=document.getElementById('env-badge');
-  if(envBadge) envBadge.style.display='inline-block';
-  document.title = 'Financial Hub · DEV';
-}
 
 const APP_SECRET = 'zW32WdZ6sjemsWkQqXUc4Fvfa6TxtvIq6H63FsKYdzc'; // sent on every Supabase call; RLS policies require this header to match
 
@@ -1771,8 +1771,6 @@ function getTopCategoryId(categoryId){
   return cat.parent_id || cat.id;
 }
 
-let catCreateTargetField = null; // tracks which trigger (cf-cat / inv-cat) to auto-select into after creating a category inline
-
 function catDisplayLabel(cat){
   if(!cat) return '';
   if(cat.parent_id){
@@ -1781,6 +1779,8 @@ function catDisplayLabel(cat){
   }
   return cat.name;
 }
+
+let catCreateTargetField = null; // tracks which trigger (cf-cat / inv-cat) to auto-select into after creating a category inline
 
 function openCfCategoryPicker(){
   const current = document.getElementById('cf-cat').value;
@@ -2310,169 +2310,45 @@ async function searchYahoo(q){
       const r = await fetch(`${DEV_PROXY}/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(8000)});
       if(r.ok){
         const d = await r.json();
-        if(d?.quotes) return d.quotes.filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
+        if(d?.quotes?.length) return d.quotes.filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
           symbol: r.symbol,
           name: r.longname||r.shortname||r.symbol,
           exch: r.exchDisp||r.exchange||''
         }));
       }
-    }catch{ /* fall through to allOrigins below */ }
+    }catch{ /* fall through to the public proxies below */ }
   }
 
-  // Fallback: allOrigins. Works but responds slowly, so the timeout must be generous —
-  // a short one looks identical to a failure.
-  const yhUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
+  // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
+  const yhSearch = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
   const proxyFns = [
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
+    u=>`https://cors.eu.org/${u}`,
   ];
+  // Race every proxy simultaneously — use whichever responds first with valid data,
+  // instead of trying them one-by-one (which wastes time on dead/rate-limited proxies).
   const tryProxy = async (proxyFn) => {
-    const r = await fetch(proxyFn(yhUrl), {signal: AbortSignal.timeout(20000)});
+    const r = await fetch(proxyFn(yhSearch), {signal: AbortSignal.timeout(6000)});
     if(!r.ok) throw new Error('not ok');
     const text = await r.text();
     if(!text.startsWith('{')) throw new Error('not json');
-    let d = JSON.parse(text);
-    // allorigins /get wraps the payload in .contents; /raw returns it directly
-    if(typeof d.contents === 'string') d = JSON.parse(d.contents);
-    if(!d?.quotes) throw new Error('no quotes');
-    return (d.quotes||[]).filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
+    const d = JSON.parse(text);
+    const results = (d?.quotes||[]).filter(q=>q.symbol && q.quoteType!=='CURRENCY').map(r=>({
       symbol: r.symbol,
       name: r.longname||r.shortname||r.symbol,
       exch: r.exchDisp||r.exchange||''
     }));
+    if(!results.length) throw new Error('no results');
+    return results;
   };
   try{
     return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
   }catch{
     return null;
   }
-}
-
-async function fetchYahooRaw(ticker){
-  if(APP_ENV==='prod'){
-    try{
-      const r = await fetch(`/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
-      if(!r.ok) throw new Error('not ok');
-      const d = await r.json();
-      const meta = d?.chart?.result?.[0]?.meta;
-      const price = meta?.regularMarketPrice;
-      if(price == null) throw new Error('no price');
-      return { price, currency: meta?.currency || 'USD' };
-    }catch{
-      return null;
-    }
-  }
-
-  // Dev: use our own Deno Deploy proxy when configured (see searchYahoo).
-  if(DEV_PROXY){
-    try{
-      const r = await fetch(`${DEV_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(8000)});
-      if(r.ok){
-        const d = await r.json();
-        const meta = d?.chart?.result?.[0]?.meta;
-        if(meta?.regularMarketPrice != null) return { price: meta.regularMarketPrice, currency: meta.currency || 'USD' };
-      }
-    }catch{ /* fall through to allOrigins below */ }
-  }
-
-  // Fallback: allOrigins (see searchYahoo for why the timeout is generous).
-  const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
-  const proxyFns = [
-    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-  ];
-  const tryProxy = async (proxyFn) => {
-    const r = await fetch(proxyFn(yhUrl), {signal: AbortSignal.timeout(20000)});
-    if(!r.ok) throw new Error('not ok');
-    const text = await r.text();
-    if(!text.startsWith('{')) throw new Error('not json');
-    let d = JSON.parse(text);
-    // allorigins /get wraps the payload in .contents; /raw returns it directly
-    if(typeof d.contents === 'string') d = JSON.parse(d.contents);
-    const meta = d?.chart?.result?.[0]?.meta;
-    const price = meta?.regularMarketPrice;
-    if(price == null) throw new Error('no price');
-    return { price, currency: meta?.currency || 'USD' };
-  };
-  try{
-    return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
-  }catch{
-    return null;
-  }
-}
-
-function cgIdForTicker(ticker){
-  // Direct match first (set at search-select time or from built-in map)
-  if(COINGECKO_IDS[ticker]) return COINGECKO_IDS[ticker];
-  // Strip common suffixes: BTC-EUR → BTC, KASUSDT → KAS
-  const base = ticker.replace(/[-/](EUR|USD|USDT|USDC|BTC|ETH)$/i,'')
-                      .replace(/(EUR|USD|USDT|USDC)$/i,'').toUpperCase();
-  return COINGECKO_IDS[base] || null;
-}
-
-async function deleteCategoryHoldings(type){
-  const catHoldings = holdings.filter(h=>h.type===type);
-  if(!catHoldings.length) return;
-  const totalTxCount = cfTransactions.filter(t=>catHoldings.some(h=>h.id===t.holding_id||h.id===t.holding_to_id)).length;
-  const msg = `Delete all ${TYPE_LABELS[type]||type} holdings (${catHoldings.length})?`
-    + (totalTxCount>0 ? `\n\nThis will also delete ${totalTxCount} linked transaction${totalTxCount>1?'s':''} and reverse their balance changes.` : '')
-    + '\n\nThis cannot be undone.';
-  if(!await showConfirm(msg, 'Delete category', true)) return;
-  // Cascade delete: transactions first, then holdings
-  for(const h of catHoldings){
-    const linkedTxs = cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
-    for(const t of linkedTxs){
-      const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
-      await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
-      await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
-    }
-    await api(`holdings?id=eq.${h.id}`,{method:'DELETE'});
-  }
-  await loadAll();
-  cfTransactions = await api('cashflow_transactions?order=date.desc');
-  renderCashflow();
-  toast(`${TYPE_LABELS[type]||type} holdings deleted`);
-}
-
-async function deleteHolding(id){
-  const linkedTxCount = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
-  const msg = linkedTxCount>0
-    ? `This holding has ${linkedTxCount} linked transaction${linkedTxCount>1?'s':''}.\n\nDeleting it will also delete all those transactions and reverse their balance changes.\n\nProceed?`
-    : 'Remove this holding?';
-  if(!await showConfirm(msg,'Delete holding', true)) return;
-  // Cascade: reverse balance + delete all linked transactions first
-  const linkedTxs = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id);
-  for(const t of linkedTxs){
-    const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
-    await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
-    await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
-  }
-  await api(`holdings?id=eq.${id}`,{method:'DELETE'});
-  await loadAll();
-  cfTransactions = await api('cashflow_transactions?order=date.desc');
-  renderCashflow();
-  toast('Holding and transactions deleted');
-}
-
-async function deleteTx(id){
-  if(!await showConfirm('Remove this transaction?')) return;
-  await api(`transactions?id=eq.${id}`,{method:'DELETE'}); await loadAll(); toast('Transaction removed');
-}
-
-async function editBalance(id, name, currentBalance){
-  const input = await showInputDialog('Edit balance', name, currentBalance.toFixed(2));
-  if(input===null||input.trim()==='') return;
-  const newBalance = parseFloat(input.replace(',','.'));
-  if(isNaN(newBalance)||newBalance<0){ await showAlert('Please enter a valid positive amount.'); return; }
-  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance})});
-  await loadAll(); toast('Balance updated ✓');
-}
-
-function manualTickerLink(q){
-  const safeQ = (q||'').replace(/'/g,"\\'");
-  return `<div onclick="selectManualTicker('${safeQ}')" style="justify-content:center;color:var(--accent);font-weight:600">
-    <i class="ti ti-edit" style="font-size:12px;margin-right:4px"></i> Can't find it? Enter ticker manually
-  </div>`;
 }
 
 async function onTickerSearch(q){
@@ -2525,29 +2401,28 @@ async function onTickerSearch(q){
   }, 350);
 }
 
-async function renameHolding(id, currentName){
-  // Use a custom inline modal for text input
-  const newName = await showInputDialog('Rename holding', 'Enter new name:', currentName);
-  if(newName===null||!newName.trim()) return;
-  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name:newName.trim()})});
-  await loadAll(); toast('Holding renamed ✓');
+// Fallback for when the search API is unavailable/flaky: let the user type a ticker directly.
+function manualTickerLink(q){
+  const safeQ = (q||'').replace(/'/g,"\\'");
+  return `<div onclick="selectManualTicker('${safeQ}')" style="justify-content:center;color:var(--accent);font-weight:600">
+    <i class="ti ti-edit" style="font-size:12px;margin-right:4px"></i> Can't find it? Enter ticker manually
+  </div>`;
 }
 
-function renderTx(){
-  const filtered=txFilter==='all'?transactions:transactions.filter(t=>t.type===txFilter);
-  const empty=document.getElementById('tx-empty'), table=document.getElementById('tx-table'), tbody=document.getElementById('tx-tbody');
-  if(!empty||!table||!tbody) return; // old tx page removed
-  if(!filtered.length){empty.style.display='';table.style.display='none';return;}
-  empty.style.display='none'; table.style.display='';
-  tbody.innerHTML=filtered.map(t=>`<tr>
-    <td style="color:var(--text2)">${t.date||'—'}</td>
-    <td><strong style="font-weight:600">${t.ticker}</strong><br><span style="color:var(--text2);font-size:12px">${t.name||''}</span></td>
-    <td><span style="color:${TX_COLORS[t.type]||'var(--text2)'};font-weight:600;text-transform:capitalize">${t.type}</span></td>
-    <td>${t.qty?fmtN(t.qty):'—'}</td>
-    <td>${t.price?fmt(t.price):'—'}</td>
-    <td style="font-weight:600">${t.total?fmt(t.total):'—'}</td>
-    <td><button class="btn btn-sm btn-danger" onclick="deleteTx('${t.id}')"><i class="ti ti-trash"></i></button></td>
-  </tr>`).join('');
+async function selectManualTicker(prefill){
+  const ticker = await showInputDialog('Enter ticker symbol', 'Type the exact ticker (e.g. AAPL, VWCE.MI):', prefill||'');
+  if(ticker===null || !ticker.trim()) return;
+  const clean = ticker.trim().toUpperCase();
+  selectTicker(clean, clean, 'Manual entry');
+}
+
+// For crypto: store cgId so CoinGecko price fetch knows which coin to call
+function selectCryptoTicker(symbol, name, cgId){
+  // Strip fiat suffix from symbol (BTC-EUR → BTC) and name (Bitcoin EUR → Bitcoin)
+  const cleanSymbol = symbol.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i, '').toUpperCase();
+  const cleanName   = name.replace(/\s+(EUR|USD|USDT|USDC|GBP)$/i, '').trim();
+  COINGECKO_IDS[cleanSymbol] = cgId;
+  selectTicker(cleanSymbol, cleanName, 'Crypto');
 }
 
 async function saveHolding(){
@@ -2614,41 +2489,12 @@ async function saveHolding(){
   closeModal('modal-holding'); await loadAll(); toast('Holding saved ✓'); refreshPrices(true, true);
 }
 
-async function saveTx(){
-  const ticker=document.getElementById('tx-ticker').value.trim().toUpperCase();
-  if(!ticker){await showAlert('Please enter a ticker.');return;}
-  const row={
-    date:document.getElementById('tx-date').value,
-    type:document.getElementById('tx-type').value,
-    ticker, name:document.getElementById('tx-name').value.trim()||ticker,
-    qty:parseFloat(document.getElementById('tx-qty').value)||null,
-    price:parseFloat(document.getElementById('tx-price').value)||null,
-    notes:document.getElementById('tx-notes').value.trim()||null
-  };
-  row.total=(row.qty&&row.price)?row.qty*row.price:null;
-  await api('transactions',{method:'POST',body:JSON.stringify(row)});
-  closeModal('modal-tx'); await loadAll(); toast('Transaction saved ✓');
-}
-
-function selectCryptoTicker(symbol, name, cgId){
-  // Strip fiat suffix from symbol (BTC-EUR → BTC) and name (Bitcoin EUR → Bitcoin)
-  const cleanSymbol = symbol.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i, '').toUpperCase();
-  const cleanName   = name.replace(/\s+(EUR|USD|USDT|USDC|GBP)$/i, '').trim();
-  COINGECKO_IDS[cleanSymbol] = cgId;
-  selectTicker(cleanSymbol, cleanName, 'Crypto');
-}
-
-async function selectManualTicker(prefill){
-  const ticker = await showInputDialog('Enter ticker symbol', 'Type the exact ticker (e.g. AAPL, VWCE.MI):', prefill||'');
-  if(ticker===null || !ticker.trim()) return;
-  const clean = ticker.trim().toUpperCase();
-  selectTicker(clean, clean, 'Manual entry');
-}
-
-function setFilter(f,btn){
-  txFilter=f;
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); renderTx();
+async function renameHolding(id, currentName){
+  // Use a custom inline modal for text input
+  const newName = await showInputDialog('Rename holding', 'Enter new name:', currentName);
+  if(newName===null||!newName.trim()) return;
+  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name:newName.trim()})});
+  await loadAll(); toast('Holding renamed ✓');
 }
 
 function showInputDialog(title, label, defaultVal=''){
@@ -2674,38 +2520,214 @@ function showInputDialog(title, label, defaultVal=''){
   });
 }
 
-// Fetch all crypto prices in a single batched CoinGecko call (EUR, no API key needed).
-// Returns a { ticker: price } map. Tickers are resolved to CoinGecko IDs via COINGECKO_IDS.
-async function fetchAllCryptoPrices(tickers){
-  if(!tickers.length) return {};
-  const out = {};
-  // Map each ticker to its CoinGecko id (cleaning pair suffixes like BTC-EUR -> BTC)
-  const idByTicker = {};
-  tickers.forEach(t=>{
-    const clean = cleanCryptoTicker(t);
-    const id = COINGECKO_IDS[clean] || COINGECKO_IDS[t];
-    if(id) idByTicker[t] = id;
-  });
-  const ids = [...new Set(Object.values(idByTicker))];
-  if(!ids.length) return out;
-  try{
-    const r = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=eur`,
-      {signal: AbortSignal.timeout(10000)}
-    );
-    if(!r.ok) throw new Error('coingecko not ok');
-    const d = await r.json();
-    Object.entries(idByTicker).forEach(([ticker,id])=>{
-      const p = d?.[id]?.eur;
-      if(p != null){
-        out[ticker] = p;
-        out[cleanCryptoTicker(ticker)] = p; // also key by clean ticker, used by getVal()
-      }
-    });
-  }catch(e){
-    console.warn('CoinGecko: could not fetch crypto prices', e);
+async function editBalance(id, name, currentBalance){
+  const input = await showInputDialog('Edit balance', name, currentBalance.toFixed(2));
+  if(input===null||input.trim()==='') return;
+  const newBalance = parseFloat(input.replace(',','.'));
+  if(isNaN(newBalance)||newBalance<0){ await showAlert('Please enter a valid positive amount.'); return; }
+  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance})});
+  await loadAll(); toast('Balance updated ✓');
+}
+
+
+async function deleteHolding(id){
+  const linkedTxCount = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
+  const msg = linkedTxCount>0
+    ? `This holding has ${linkedTxCount} linked transaction${linkedTxCount>1?'s':''}.\n\nDeleting it will also delete all those transactions and reverse their balance changes.\n\nProceed?`
+    : 'Remove this holding?';
+  if(!await showConfirm(msg,'Delete holding', true)) return;
+  // Cascade: reverse balance + delete all linked transactions first
+  const linkedTxs = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id);
+  for(const t of linkedTxs){
+    const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
+    await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
+    await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
   }
-  return out;
+  await api(`holdings?id=eq.${id}`,{method:'DELETE'});
+  await loadAll();
+  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  renderCashflow();
+  toast('Holding and transactions deleted');
+}
+
+async function deleteCategoryHoldings(type){
+  const catHoldings = holdings.filter(h=>h.type===type);
+  if(!catHoldings.length) return;
+  const totalTxCount = cfTransactions.filter(t=>catHoldings.some(h=>h.id===t.holding_id||h.id===t.holding_to_id)).length;
+  const msg = `Delete all ${TYPE_LABELS[type]||type} holdings (${catHoldings.length})?`
+    + (totalTxCount>0 ? `\n\nThis will also delete ${totalTxCount} linked transaction${totalTxCount>1?'s':''} and reverse their balance changes.` : '')
+    + '\n\nThis cannot be undone.';
+  if(!await showConfirm(msg, 'Delete category', true)) return;
+  // Cascade delete: transactions first, then holdings
+  for(const h of catHoldings){
+    const linkedTxs = cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
+    for(const t of linkedTxs){
+      const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
+      await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
+      await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
+    }
+    await api(`holdings?id=eq.${h.id}`,{method:'DELETE'});
+  }
+  await loadAll();
+  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  renderCashflow();
+  toast(`${TYPE_LABELS[type]||type} holdings deleted`);
+}
+
+// ── TRANSACTIONS ──
+const TX_COLORS={buy:'var(--green)',sell:'var(--red)',dividend:'var(--blue)',transfer:'var(--text2)'};
+
+function renderTx(){
+  const filtered=txFilter==='all'?transactions:transactions.filter(t=>t.type===txFilter);
+  const empty=document.getElementById('tx-empty'), table=document.getElementById('tx-table'), tbody=document.getElementById('tx-tbody');
+  if(!empty||!table||!tbody) return; // old tx page removed
+  if(!filtered.length){empty.style.display='';table.style.display='none';return;}
+  empty.style.display='none'; table.style.display='';
+  tbody.innerHTML=filtered.map(t=>`<tr>
+    <td style="color:var(--text2)">${t.date||'—'}</td>
+    <td><strong style="font-weight:600">${t.ticker}</strong><br><span style="color:var(--text2);font-size:12px">${t.name||''}</span></td>
+    <td><span style="color:${TX_COLORS[t.type]||'var(--text2)'};font-weight:600;text-transform:capitalize">${t.type}</span></td>
+    <td>${t.qty?fmtN(t.qty):'—'}</td>
+    <td>${t.price?fmt(t.price):'—'}</td>
+    <td style="font-weight:600">${t.total?fmt(t.total):'—'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteTx('${t.id}')"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+async function saveTx(){
+  const ticker=document.getElementById('tx-ticker').value.trim().toUpperCase();
+  if(!ticker){await showAlert('Please enter a ticker.');return;}
+  const row={
+    date:document.getElementById('tx-date').value,
+    type:document.getElementById('tx-type').value,
+    ticker, name:document.getElementById('tx-name').value.trim()||ticker,
+    qty:parseFloat(document.getElementById('tx-qty').value)||null,
+    price:parseFloat(document.getElementById('tx-price').value)||null,
+    notes:document.getElementById('tx-notes').value.trim()||null
+  };
+  row.total=(row.qty&&row.price)?row.qty*row.price:null;
+  await api('transactions',{method:'POST',body:JSON.stringify(row)});
+  closeModal('modal-tx'); await loadAll(); toast('Transaction saved ✓');
+}
+
+async function deleteTx(id){
+  if(!await showConfirm('Remove this transaction?')) return;
+  await api(`transactions?id=eq.${id}`,{method:'DELETE'}); await loadAll(); toast('Transaction removed');
+}
+
+function setFilter(f,btn){
+  txFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderTx();
+}
+
+// ── PRICES ──
+// CoinGecko symbol/ticker → coin ID map (runtime, extended on search selection)
+const COINGECKO_IDS = {
+  'BTC':'bitcoin','ETH':'ethereum','SOL':'solana','BNB':'binancecoin',
+  'XRP':'ripple','ADA':'cardano','AVAX':'avalanche-2','DOT':'polkadot',
+  'DOGE':'dogecoin','SHIB':'shiba-inu','MATIC':'matic-network','LINK':'chainlink',
+  'UNI':'uniswap','LTC':'litecoin','BCH':'bitcoin-cash','ATOM':'cosmos',
+  'XLM':'stellar','ALGO':'algorand','VET':'vechain','FIL':'filecoin',
+  'ICP':'internet-computer','APT':'aptos','ARB':'arbitrum','OP':'optimism',
+  'INJ':'injective-protocol','SUI':'sui','TIA':'celestia','SEI':'sei-network',
+  'KAS':'kaspa','NEAR':'near','FTM':'fantom','SAND':'the-sandbox',
+  'MANA':'decentraland','AXS':'axie-infinity','GRT':'the-graph',
+  'AAVE':'aave','MKR':'maker','CRV':'curve-dao-token','SNX':'havven',
+  'COMP':'compound-governance-token','YFI':'yearn-finance','SUSHI':'sushi',
+  'PEPE':'pepe','WIF':'dogwifcoin','BONK':'bonk','FLOKI':'floki',
+  'TON':'the-open-network','NOT':'notcoin','TRUMP':'maga',
+};
+
+// Resolve ticker → CoinGecko ID.
+// Ticker may be the raw symbol (e.g. KAS) or whatever Yahoo would use.
+// selectCryptoTicker() always registers the correct cgId at selection time.
+function cgIdForTicker(ticker){
+  // Direct match first (set at search-select time or from built-in map)
+  if(COINGECKO_IDS[ticker]) return COINGECKO_IDS[ticker];
+  // Strip common suffixes: BTC-EUR → BTC, KASUSDT → KAS
+  const base = ticker.replace(/[-/](EUR|USD|USDT|USDC|BTC|ETH)$/i,'')
+                      .replace(/(EUR|USD|USDT|USDC)$/i,'').toUpperCase();
+  return COINGECKO_IDS[base] || null;
+}
+
+// Fetch prices for ALL crypto holdings in one CoinGecko batch call
+async function fetchAllCryptoPrices(tickers){
+  const cgIds = [...new Set(tickers.map(t=>cgIdForTicker(t)).filter(Boolean))];
+  if(!cgIds.length) return {};
+  try{
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${cgIds.join(',')}&vs_currencies=eur`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(10000)});
+    if(!r.ok) throw new Error('CoinGecko HTTP ' + r.status);
+    const data = await r.json();
+    // Build ticker → price map
+    const result = {};
+    tickers.forEach(t=>{
+      const id = cgIdForTicker(t);
+      if(id && data[id]?.eur != null) result[t] = data[id].eur;
+    });
+    return result;
+  }catch(e){
+    console.warn('CoinGecko batch fetch failed:', e.message);
+    return {};
+  }
+}
+
+// Yahoo Finance via CORS proxy for stocks/ETFs/bonds
+// Low-level: fetch the raw price + currency for any Yahoo ticker (a stock, or an FX pair like 'EURUSD=X')
+async function fetchYahooRaw(ticker){
+  if(APP_ENV==='prod'){
+    try{
+      const r = await fetch(`/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(5000)});
+      if(!r.ok) throw new Error('not ok');
+      const d = await r.json();
+      const meta = d?.chart?.result?.[0]?.meta;
+      const price = meta?.regularMarketPrice;
+      if(price == null) throw new Error('no price');
+      return { price, currency: meta?.currency || 'USD' };
+    }catch{
+      return null;
+    }
+  }
+
+  // Dev: use our own Deno Deploy proxy when configured (see searchYahoo).
+  if(DEV_PROXY){
+    try{
+      const r = await fetch(`${DEV_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(8000)});
+      if(r.ok){
+        const d = await r.json();
+        const meta = d?.chart?.result?.[0]?.meta;
+        if(meta?.regularMarketPrice != null) return { price: meta.regularMarketPrice, currency: meta.currency || 'USD' };
+      }
+    }catch{ /* fall through to the public proxies below */ }
+  }
+
+  // Dev / non-Worker environments: fall back to public CORS proxies (best-effort, may be flaky)
+  const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+  const proxyFns = [
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
+    u=>`https://cors.eu.org/${u}`,
+  ];
+  // Race all proxies simultaneously — use whichever responds first with valid data
+  const tryProxy = async (proxyFn) => {
+    const r = await fetch(proxyFn(yhUrl), {signal: AbortSignal.timeout(3000)});
+    if(!r.ok) throw new Error('not ok');
+    const text = await r.text();
+    if(!text.startsWith('{')) throw new Error('not json');
+    const d = JSON.parse(text);
+    const meta = d?.chart?.result?.[0]?.meta;
+    const price = meta?.regularMarketPrice;
+    if(price == null) throw new Error('no price');
+    return { price, currency: meta?.currency || 'USD' };
+  };
+  try{
+    return await Promise.any(proxyFns.map(fn => tryProxy(fn)));
+  }catch{
+    return null;
+  }
 }
 
 // Cache of EUR conversion rates for the current refresh cycle — several holdings often
