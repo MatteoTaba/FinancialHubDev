@@ -3265,10 +3265,10 @@ function renderSavingsChart(){
     const out=cfTransactions.filter(t=>new Date(t.date).getFullYear()===y&&isOutcomeTx(t)).reduce((s,t)=>s+t.amount,0);
     return +(inc-out).toFixed(2);
   });
-  // Height must match the number of bars actually drawn — 42px per bar plus ~55px
-  // for the x-axis labels and padding, so a single-year chart doesn't leave dead space.
+  // Grow with the number of bars, but never shrink below the 'Invested capital' chart
+  // beside it (220px) — otherwise the shorter card leaves dead space in the Wealth row.
   const sWrap=document.getElementById('savings-wrap');
-  if(sWrap) sWrap.style.height=(years.length*42+55)+'px';
+  if(sWrap) sWrap.style.height=Math.max(220, years.length*42+55)+'px';
   const c=getChartColors();
   if(savingsChart) savingsChart.destroy();
   const isMobSav=window.innerWidth<=768;
@@ -3296,7 +3296,7 @@ function renderSavingsChart(){
   };
   savingsChart=new Chart(el,{
     type:'bar',
-    data:{labels:years,datasets:[{data:savings,backgroundColor:savings.map(s=>s>=0?'rgba(96,168,245,0.85)':'rgba(224,80,80,0.85)'),borderRadius:4,borderSkipped:false}]},
+    data:{labels:years,datasets:[{data:savings,backgroundColor:savings.map(s=>s>=0?'rgba(96,168,245,0.85)':'rgba(224,80,80,0.85)'),borderRadius:4,borderSkipped:false,maxBarThickness:52}]},
     options:{
       responsive:true,maintainAspectRatio:false,
       indexAxis:'y',
