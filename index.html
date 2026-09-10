@@ -2401,6 +2401,313 @@ async function fetchYahooRaw(ticker){
   }
 }
 
+function cgIdForTicker(ticker){
+  // Direct match first (set at search-select time or from built-in map)
+  if(COINGECKO_IDS[ticker]) return COINGECKO_IDS[ticker];
+  // Strip common suffixes: BTC-EUR → BTC, KASUSDT → KAS
+  const base = ticker.replace(/[-/](EUR|USD|USDT|USDC|BTC|ETH)$/i,'')
+                      .replace(/(EUR|USD|USDT|USDC)$/i,'').toUpperCase();
+  return COINGECKO_IDS[base] || null;
+}
+
+async function deleteCategoryHoldings(type){
+  const catHoldings = holdings.filter(h=>h.type===type);
+  if(!catHoldings.length) return;
+  const totalTxCount = cfTransactions.filter(t=>catHoldings.some(h=>h.id===t.holding_id||h.id===t.holding_to_id)).length;
+  const msg = `Delete all ${TYPE_LABELS[type]||type} holdings (${catHoldings.length})?`
+    + (totalTxCount>0 ? `\n\nThis will also delete ${totalTxCount} linked transaction${totalTxCount>1?'s':''} and reverse their balance changes.` : '')
+    + '\n\nThis cannot be undone.';
+  if(!await showConfirm(msg, 'Delete category', true)) return;
+  // Cascade delete: transactions first, then holdings
+  for(const h of catHoldings){
+    const linkedTxs = cfTransactions.filter(t=>t.holding_id===h.id||t.holding_to_id===h.id);
+    for(const t of linkedTxs){
+      const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
+      await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
+      await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
+    }
+    await api(`holdings?id=eq.${h.id}`,{method:'DELETE'});
+  }
+  await loadAll();
+  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  renderCashflow();
+  toast(`${TYPE_LABELS[type]||type} holdings deleted`);
+}
+
+async function deleteHolding(id){
+  const linkedTxCount = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id).length;
+  const msg = linkedTxCount>0
+    ? `This holding has ${linkedTxCount} linked transaction${linkedTxCount>1?'s':''}.\n\nDeleting it will also delete all those transactions and reverse their balance changes.\n\nProceed?`
+    : 'Remove this holding?';
+  if(!await showConfirm(msg,'Delete holding', true)) return;
+  // Cascade: reverse balance + delete all linked transactions first
+  const linkedTxs = cfTransactions.filter(t=>t.holding_id===id||t.holding_to_id===id);
+  for(const t of linkedTxs){
+    const reverseType = t.type==='expense'?'income':t.type==='income'?'expense':t.type;
+    await applyBalanceChange(reverseType, Number(t.amount), t.holding_id||null, t.holding_to_id||null);
+    await api(`cashflow_transactions?id=eq.${t.id}`,{method:'DELETE'});
+  }
+  await api(`holdings?id=eq.${id}`,{method:'DELETE'});
+  await loadAll();
+  cfTransactions = await api('cashflow_transactions?order=date.desc');
+  renderCashflow();
+  toast('Holding and transactions deleted');
+}
+
+async function deleteTx(id){
+  if(!await showConfirm('Remove this transaction?')) return;
+  await api(`transactions?id=eq.${id}`,{method:'DELETE'}); await loadAll(); toast('Transaction removed');
+}
+
+async function editBalance(id, name, currentBalance){
+  const input = await showInputDialog('Edit balance', name, currentBalance.toFixed(2));
+  if(input===null||input.trim()==='') return;
+  const newBalance = parseFloat(input.replace(',','.'));
+  if(isNaN(newBalance)||newBalance<0){ await showAlert('Please enter a valid positive amount.'); return; }
+  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance})});
+  await loadAll(); toast('Balance updated ✓');
+}
+
+function manualTickerLink(q){
+  const safeQ = (q||'').replace(/'/g,"\\'");
+  return `<div onclick="selectManualTicker('${safeQ}')" style="justify-content:center;color:var(--accent);font-weight:600">
+    <i class="ti ti-edit" style="font-size:12px;margin-right:4px"></i> Can't find it? Enter ticker manually
+  </div>`;
+}
+
+async function onTickerSearch(q){
+  const box  = document.getElementById('h-search-results');
+  const type = document.getElementById('h-type').value;
+  clearTimeout(tickerSearchTimeout);
+  if(q.trim().length < 2){ box.style.display='none'; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="sr-loading">Searching…</div>';
+  tickerSearchTimeout = setTimeout(async ()=>{
+    try{
+      let results = null;
+      if(type === 'crypto'){
+        // Use CoinGecko for crypto search
+        results = await searchCoinGecko(q);
+        if(!results||!results.length){ box.innerHTML='<div class="sr-loading">No crypto found — try full name (e.g. "Kaspa")</div>'; return; }
+        // Store cgId on the element so selectTicker can register it
+        box.innerHTML = results.map(r=>{
+          const safeSymbol = r.symbol.replace(/'/g,'\\\'');
+          const safeName   = r.name.replace(/'/g,'\\\'');
+          const safeCgId   = r.cgId.replace(/'/g,'\\\'');
+          return `<div onclick="selectCryptoTicker('${safeSymbol}','${safeName}','${safeCgId}')">
+            <span class="sr-ticker">${r.symbol}</span>
+            <span class="sr-name">${r.name}</span>
+            <span class="sr-exch">CoinGecko</span>
+          </div>`;
+        }).join('');
+      } else {
+        // Use Yahoo for stocks/ETFs/bonds
+        results = await searchYahoo(q);
+        const manualLink = manualTickerLink(q);
+        if(!results || !results.length){
+          box.innerHTML = `<div class="sr-loading">${results ? 'No results found' : 'Search failed — try again'}</div>` + manualLink;
+          return;
+        }
+        box.innerHTML = results.map(r=>{
+          const safeSymbol = r.symbol.replace(/'/g,'\\\'');
+          const safeName   = r.name.replace(/'/g,'\\\'');
+          const safeExch   = r.exch.replace(/'/g,'\\\'');
+          return `<div onclick="selectTicker('${safeSymbol}','${safeName}','${safeExch}')">
+            <span class="sr-ticker">${r.symbol}</span>
+            <span class="sr-name">${r.name}</span>
+            <span class="sr-exch">${r.exch}</span>
+          </div>`;
+        }).join('') + manualLink;
+      }
+    }catch(e){
+      box.innerHTML = '<div class="sr-loading">Search error</div>' + (type!=='crypto' ? manualTickerLink(q) : '');
+    }
+  }, 350);
+}
+
+async function renameHolding(id, currentName){
+  // Use a custom inline modal for text input
+  const newName = await showInputDialog('Rename holding', 'Enter new name:', currentName);
+  if(newName===null||!newName.trim()) return;
+  await api(`holdings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name:newName.trim()})});
+  await loadAll(); toast('Holding renamed ✓');
+}
+
+function renderTx(){
+  const filtered=txFilter==='all'?transactions:transactions.filter(t=>t.type===txFilter);
+  const empty=document.getElementById('tx-empty'), table=document.getElementById('tx-table'), tbody=document.getElementById('tx-tbody');
+  if(!empty||!table||!tbody) return; // old tx page removed
+  if(!filtered.length){empty.style.display='';table.style.display='none';return;}
+  empty.style.display='none'; table.style.display='';
+  tbody.innerHTML=filtered.map(t=>`<tr>
+    <td style="color:var(--text2)">${t.date||'—'}</td>
+    <td><strong style="font-weight:600">${t.ticker}</strong><br><span style="color:var(--text2);font-size:12px">${t.name||''}</span></td>
+    <td><span style="color:${TX_COLORS[t.type]||'var(--text2)'};font-weight:600;text-transform:capitalize">${t.type}</span></td>
+    <td>${t.qty?fmtN(t.qty):'—'}</td>
+    <td>${t.price?fmt(t.price):'—'}</td>
+    <td style="font-weight:600">${t.total?fmt(t.total):'—'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteTx('${t.id}')"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+async function saveHolding(){
+  const type=document.getElementById('h-type').value;
+  const isSimple = type==='bank' || type==='cash' || type==='dividend';
+  const costInput=parseFloat(document.getElementById('h-cost').value)||0;
+
+  if(isSimple){
+    if(type==='dividend'){
+      const stockId = document.getElementById('h-div-stock').value;
+      if(!stockId){ await showAlert('Please select a stock.'); return; }
+      const stock = holdings.find(h=>h.id===stockId);
+      if(!stock){ await showAlert('Selected stock not found — please pick it again.'); return; }
+      if(costInput<=0){ await showAlert('Please enter the dividend amount received.'); return; }
+      const stockName = stock.name || stock.ticker;
+      const name   = `${stockName} - Dividends`;
+      const ticker = `${stock.ticker}_DIV`.toUpperCase();
+      const existing = holdings.find(h=>h.ticker===ticker && h.type==='dividend');
+      if(existing){
+        // Accumulate: each dividend logged adds to the running total for this stock, never overwrites it.
+        const newBalance = (existing.avg_cost||0) + costInput;
+        await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({avg_cost:newBalance, name})});
+      } else {
+        await api('holdings',{method:'POST',body:JSON.stringify({ticker, name, type, qty:1, avg_cost:costInput})});
+      }
+      closeModal('modal-holding'); await loadAll(); toast('Dividend recorded ✓'); refreshPrices(true, true);
+      return;
+    }
+    const name=document.getElementById('h-name').value.trim();
+    if(!name){ await showAlert('Please enter an account name.'); return; }
+    if(costInput<=0){ await showAlert('Please enter the current balance.'); return; }
+    const avg_cost = costInput;
+    const ticker = name.toUpperCase().replace(/\s+/g,'_').slice(0,30);
+    const existing = holdings.find(h=>h.ticker===ticker);
+    if(existing){
+      await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({avg_cost, qty:1, name})});
+    } else {
+      await api('holdings',{method:'POST',body:JSON.stringify({ticker, name, type, qty:1, avg_cost})});
+    }
+  } else {
+    const ticker=document.getElementById('h-ticker').value.trim().toUpperCase();
+    const qty=parseFloat(document.getElementById('h-qty').value)||0;
+    const selectedLabel=document.getElementById('h-selected-label').textContent;
+    // extract name from selected label (format: "TICKER — Name (Exch)")
+    const namePart = selectedLabel.includes(' — ') ? selectedLabel.split(' — ')[1].replace(/\s*\(.*\)$/,'').trim() : ticker;
+    if(!ticker){ await showAlert('Please search and select an asset first.'); return; }
+    if(qty<=0){ await showAlert('Please enter a quantity.'); return; }
+    if(costInput<=0){ await showAlert(hCostMode==='total' ? 'Please enter the total cost paid.' : 'Please enter the average cost per unit.'); return; }
+    // If the person entered a TOTAL cost, convert it to a per-unit cost before storing —
+    // avg_cost is always stored per-unit in the database.
+    const avg_cost = hCostMode==='total' ? costInput/qty : costInput;
+    const existing=holdings.find(h=>h.ticker===ticker);
+    // Duplicate check: warn if ticker already exists as a different type
+    const existingDiff=holdings.find(h=>h.ticker===ticker&&h.type!==type);
+    if(existingDiff&&!existing){ if(!await showConfirm(`Ticker ${ticker} already exists as ${TYPE_LABELS[existingDiff.type]}. Add anyway?`)) return; }
+    if(existing){
+      const totalCost=existing.qty*existing.avg_cost+qty*avg_cost;
+      const newQty=existing.qty+qty;
+      await api(`holdings?id=eq.${existing.id}`,{method:'PATCH',body:JSON.stringify({qty:newQty,avg_cost:totalCost/newQty})});
+    } else {
+      await api('holdings',{method:'POST',body:JSON.stringify({ticker,name:namePart||ticker,type,qty,avg_cost})});
+    }
+  }
+  closeModal('modal-holding'); await loadAll(); toast('Holding saved ✓'); refreshPrices(true, true);
+}
+
+async function saveTx(){
+  const ticker=document.getElementById('tx-ticker').value.trim().toUpperCase();
+  if(!ticker){await showAlert('Please enter a ticker.');return;}
+  const row={
+    date:document.getElementById('tx-date').value,
+    type:document.getElementById('tx-type').value,
+    ticker, name:document.getElementById('tx-name').value.trim()||ticker,
+    qty:parseFloat(document.getElementById('tx-qty').value)||null,
+    price:parseFloat(document.getElementById('tx-price').value)||null,
+    notes:document.getElementById('tx-notes').value.trim()||null
+  };
+  row.total=(row.qty&&row.price)?row.qty*row.price:null;
+  await api('transactions',{method:'POST',body:JSON.stringify(row)});
+  closeModal('modal-tx'); await loadAll(); toast('Transaction saved ✓');
+}
+
+function selectCryptoTicker(symbol, name, cgId){
+  // Strip fiat suffix from symbol (BTC-EUR → BTC) and name (Bitcoin EUR → Bitcoin)
+  const cleanSymbol = symbol.replace(/[-/](EUR|USD|USDT|USDC|GBP)$/i, '').toUpperCase();
+  const cleanName   = name.replace(/\s+(EUR|USD|USDT|USDC|GBP)$/i, '').trim();
+  COINGECKO_IDS[cleanSymbol] = cgId;
+  selectTicker(cleanSymbol, cleanName, 'Crypto');
+}
+
+async function selectManualTicker(prefill){
+  const ticker = await showInputDialog('Enter ticker symbol', 'Type the exact ticker (e.g. AAPL, VWCE.MI):', prefill||'');
+  if(ticker===null || !ticker.trim()) return;
+  const clean = ticker.trim().toUpperCase();
+  selectTicker(clean, clean, 'Manual entry');
+}
+
+function setFilter(f,btn){
+  txFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderTx();
+}
+
+function showInputDialog(title, label, defaultVal=''){
+  return new Promise(resolve=>{
+    // Temporarily add input to dialog
+    document.getElementById('dialog-title').textContent = title;
+    document.getElementById('dialog-title').style.display = '';
+    document.getElementById('dialog-message').innerHTML =
+      `<div style="margin-bottom:8px;font-size:13px;color:var(--text2)">${label}</div>
+       <input type="text" id="dialog-input" value="${defaultVal.replace(/"/g,'&quot;')}" inputmode="decimal"
+         style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">`;
+    const footer = document.getElementById('dialog-footer');
+    footer.innerHTML = '';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn'; cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = ()=>{ closeModal('modal-dialog'); resolve(null); };
+    const okBtn = document.createElement('button');
+    okBtn.className = 'btn btn-primary'; okBtn.textContent = 'Save';
+    okBtn.onclick = ()=>{ const v=document.getElementById('dialog-input')?.value; closeModal('modal-dialog'); resolve(v||null); };
+    footer.appendChild(cancelBtn); footer.appendChild(okBtn);
+    openModal('modal-dialog');
+    setTimeout(()=>document.getElementById('dialog-input')?.select(), 50);
+  });
+}
+
+// Fetch all crypto prices in a single batched CoinGecko call (EUR, no API key needed).
+// Returns a { ticker: price } map. Tickers are resolved to CoinGecko IDs via COINGECKO_IDS.
+async function fetchAllCryptoPrices(tickers){
+  if(!tickers.length) return {};
+  const out = {};
+  // Map each ticker to its CoinGecko id (cleaning pair suffixes like BTC-EUR -> BTC)
+  const idByTicker = {};
+  tickers.forEach(t=>{
+    const clean = cleanCryptoTicker(t);
+    const id = COINGECKO_IDS[clean] || COINGECKO_IDS[t];
+    if(id) idByTicker[t] = id;
+  });
+  const ids = [...new Set(Object.values(idByTicker))];
+  if(!ids.length) return out;
+  try{
+    const r = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=eur`,
+      {signal: AbortSignal.timeout(10000)}
+    );
+    if(!r.ok) throw new Error('coingecko not ok');
+    const d = await r.json();
+    Object.entries(idByTicker).forEach(([ticker,id])=>{
+      const p = d?.[id]?.eur;
+      if(p != null){
+        out[ticker] = p;
+        out[cleanCryptoTicker(ticker)] = p; // also key by clean ticker, used by getVal()
+      }
+    });
+  }catch(e){
+    console.warn('CoinGecko: could not fetch crypto prices', e);
+  }
+  return out;
+}
+
 // Cache of EUR conversion rates for the current refresh cycle — several holdings often
 // share the same currency (e.g. multiple USD stocks), so we only fetch each rate once.
 let fxRateCache = {};
