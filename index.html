@@ -1398,6 +1398,12 @@ html, body {
 const SUPABASE_URL = 'https://lwkkuoauvvfrwboasxbi.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3a2t1b2F1dnZmcndib2FzeGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMTQ3MzksImV4cCI6MjEwMDg5MDczOX0.Lg_pCz7gG3Qa5pfZgDmhzjn2fiHz7EUuT85O5SFXb54';
 const APP_ENV = 'dev'; // 'dev' shows a DEV badge in the header · set to 'prod' for the production copy
+
+// Dev price proxy (Deno Deploy — see dev-proxy-main.ts). Independent of prod's Cloudflare Worker.
+// Paste your Deno Deploy URL here after deploying, WITHOUT a trailing slash, e.g.
+//   const DEV_PROXY = 'https://financialhub-dev.deno.dev';
+// Leave as '' to fall back to allOrigins (works, but takes several seconds per request).
+const DEV_PROXY = 'https://vague-platypus-1668.matteotaba.deno.net';
 if(APP_ENV==='dev'){
   const envBadge=document.getElementById('env-badge');
   if(envBadge) envBadge.style.display='inline-block';
@@ -2298,9 +2304,23 @@ async function searchYahoo(q){
     }
   }
 
-  // Dev / non-Worker environments: proxy through allOrigins.
-  // Only the allorigins variants still work (verified) — the others now return 401/403 or are dead.
-  // It responds slowly, so the timeout must be generous: a short one looks like a failure.
+  // Dev: use our own Deno Deploy proxy when configured — fast (~100ms) and reliable.
+  if(DEV_PROXY){
+    try{
+      const r = await fetch(`${DEV_PROXY}/api/yh-search?q=${encodeURIComponent(q)}`, {signal: AbortSignal.timeout(8000)});
+      if(r.ok){
+        const d = await r.json();
+        if(d?.quotes) return d.quotes.filter(x=>x.symbol && x.quoteType!=='CURRENCY').map(r=>({
+          symbol: r.symbol,
+          name: r.longname||r.shortname||r.symbol,
+          exch: r.exchDisp||r.exchange||''
+        }));
+      }
+    }catch{ /* fall through to allOrigins below */ }
+  }
+
+  // Fallback: allOrigins. Works but responds slowly, so the timeout must be generous —
+  // a short one looks identical to a failure.
   const yhUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=US&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
   const proxyFns = [
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -2343,7 +2363,19 @@ async function fetchYahooRaw(ticker){
     }
   }
 
-  // Dev / non-Worker environments: proxy through allOrigins (see searchYahoo for why).
+  // Dev: use our own Deno Deploy proxy when configured (see searchYahoo).
+  if(DEV_PROXY){
+    try{
+      const r = await fetch(`${DEV_PROXY}/api/yh-price?ticker=${encodeURIComponent(ticker)}`, {signal: AbortSignal.timeout(8000)});
+      if(r.ok){
+        const d = await r.json();
+        const meta = d?.chart?.result?.[0]?.meta;
+        if(meta?.regularMarketPrice != null) return { price: meta.regularMarketPrice, currency: meta.currency || 'USD' };
+      }
+    }catch{ /* fall through to allOrigins below */ }
+  }
+
+  // Fallback: allOrigins (see searchYahoo for why the timeout is generous).
   const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
   const proxyFns = [
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
